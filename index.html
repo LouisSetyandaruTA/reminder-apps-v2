@@ -1,11 +1,207 @@
 <!DOCTYPE html>
-<html>
-  <head>
-    <meta charset="UTF-8" />
-    <title>Hello World!</title>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Customer Service Reminder</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body class="bg-gray-50">
 
-  </head>
-  <body>
-    <script type="module" src="/src/app.jsx"></script>
-  </body>
+    <div id="app-container" class="min-h-screen p-6">
+        <div class="max-w-6xl mx-auto">
+            <div class="bg-white rounded-lg shadow-sm p-6 mb-6">
+                <div class="flex items-center justify-between mb-6">
+                    <h1 class="text-2xl font-bold text-gray-900 flex items-center">
+                        <i data-lucide="settings" class="mr-3 text-blue-600"></i>
+                        Reminder Water Heater
+                    </h1>
+                    <div class="flex gap-3">
+                        <button id="add-customer-btn" class="flex items-center px-4 py-2 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700">
+                            <i data-lucide="plus" class="h-4 w-4 mr-2"></i> Add Customer
+                        </button>
+                        <button id="refresh-btn" class="flex items-center px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+                            <i data-lucide="bell" class="h-4 w-4 mr-2"></i> Refresh
+                        </button>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 md:grid-cols-6 gap-4 mb-6">
+                    <div class="bg-blue-50 p-4 rounded-lg text-center">
+                        <p class="text-blue-600 text-sm font-medium">Total Customers</p>
+                        <p id="stats-total" class="text-2xl font-bold text-blue-900">0</p>
+                    </div>
+                    <div class="bg-red-50 p-4 rounded-lg text-center">
+                        <p class="text-red-600 text-sm font-medium">Overdue Services</p>
+                        <p id="stats-overdue" class="text-2xl font-bold text-red-900">0</p>
+                    </div>
+                    <div class="bg-yellow-50 p-4 rounded-lg text-center">
+                        <p class="text-yellow-600 text-sm font-medium">Due This Month</p>
+                        <p id="stats-due-month" class="text-2xl font-bold text-yellow-900">0</p>
+                    </div>
+                    <div class="bg-green-50 p-4 rounded-lg text-center">
+                        <p class="text-green-600 text-sm font-medium">Contacted</p>
+                        <p id="stats-contacted" class="text-2xl font-bold text-green-900">0</p>
+                    </div>
+                    <div class="bg-gray-50 p-4 rounded-lg text-center">
+                        <p class="text-gray-600 text-sm font-medium">Not Contacted</p>
+                        <p id="stats-not-contacted" class="text-2xl font-bold text-gray-900">0</p>
+                    </div>
+                    <div class="bg-purple-50 p-4 rounded-lg text-center">
+                        <p class="text-purple-600 text-sm font-medium">Contact Overdue</p>
+                        <p id="stats-contact-overdue" class="text-2xl font-bold text-purple-900">0</p>
+                    </div>
+                </div>
+
+                <div class="flex flex-wrap gap-4 items-center">
+                    <div class="flex items-center">
+                        <i data-lucide="search" class="text-gray-400 mr-2 h-5 w-5"></i>
+                        <input id="search-input" type="text" placeholder="Search customers..." class="border border-gray-300 rounded-lg px-3 py-2 w-64">
+                    </div>
+                    <div class="flex items-center">
+                        <i data-lucide="filter" class="text-gray-400 mr-2 h-5 w-5"></i>
+                        <select id="filter-select" class="border border-gray-300 rounded-lg px-3 py-2">
+                            <option value="all">All Customers</option>
+                            <option value="overdue">Overdue Services</option>
+                            <option value="upcoming">Due This Month</option>
+                            <option value="contacted">Contacted</option>
+                            <option value="not_contacted">Not Contacted</option>
+                            <option value="contact_overdue">Contact Overdue</option>
+                        </select>
+                    </div>
+                    <div class="flex items-center">
+                        <span class="text-gray-600 mr-2">Sort by:</span>
+                        <select id="sort-select" class="border border-gray-300 rounded-lg px-3 py-2">
+                            <option value="nextService">Next Service Date</option>
+                            <option value="name">Customer Name</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <div id="customer-list" class="space-y-4"></div>
+
+            <div id="empty-state" class="text-center py-12 hidden">
+                <i data-lucide="calendar" class="mx-auto text-gray-400 mb-4 h-12 w-12"></i>
+                <p class="text-gray-600">No customers match your current filters.</p>
+            </div>
+        </div>
+    </div>
+    
+    <div id="loading-indicator" class="fixed inset-0 bg-gray-50 flex items-center justify-center z-50">
+        <div class="text-center">
+            <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+            <p class="text-gray-600">Loading customer data...</p>
+        </div>
+    </div>
+
+    <div id="error-indicator" class="fixed inset-0 bg-gray-50 flex items-center justify-center z-50 hidden">
+        <div class="text-center bg-white p-8 rounded-lg shadow-sm">
+            <i data-lucide="alert-circle" class="text-red-600 mx-auto mb-4 h-12 w-12"></i>
+            <h2 class="text-xl font-semibold text-gray-900 mb-2">Error Loading Data</h2>
+            <p id="error-message" class="text-gray-600 mb-4"></p>
+            <button id="retry-btn" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700">
+                Try Again
+            </button>
+        </div>
+    </div>
+
+    <div id="modals-container">
+        <div id="update-service-modal" class="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50 hidden">
+            <div class="bg-white p-6 rounded-lg shadow-xl w-full max-w-md">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-xl font-bold">Update Service</h2>
+                    <button data-action="close" class="p-1 hover:bg-gray-200 rounded-full"><i data-lucide="x" class="h-5 w-5"></i></button>
+                </div>
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Service Slot</label>
+                        <select id="service-modal-select" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md">
+                            <option value="" disabled>Select service slot</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Service Date</label>
+                        <input id="service-modal-date" type="date" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md">
+                    </div>
+                </div>
+                <div class="flex justify-end gap-3 mt-6">
+                    <button data-action="close" class="px-4 py-2 bg-gray-300 rounded-md hover:bg-gray-400">Cancel</button>
+                    <button id="service-modal-save" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 flex items-center">
+                        <i data-lucide="save" class="h-4 w-4 mr-2"></i> Save
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div id="update-contact-modal" class="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50 hidden">
+            <div class="bg-white p-6 rounded-lg shadow-xl w-full max-w-md">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-xl font-bold">Update Contact Status</h2>
+                    <button data-action="close" class="p-1 hover:bg-gray-200 rounded-full"><i data-lucide="x" class="h-5 w-5"></i></button>
+                </div>
+                <div class="space-y-4">
+                    <div>
+                        <h3 id="contact-modal-name" class="text-lg font-medium"></h3>
+                        <p id="contact-modal-phone" class="text-sm text-gray-600"></p>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Contact Status</label>
+                        <select id="contact-modal-status" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md">
+                            <option value="not_contacted">Not Contacted</option>
+                            <option value="contacted">Contacted</option>
+                            <option value="overdue">Overdue (No Response)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Notes</label>
+                        <textarea id="contact-modal-notes" placeholder="Add contact notes..." class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md" rows="3"></textarea>
+                    </div>
+                </div>
+                <div class="flex justify-end gap-3 mt-6">
+                    <button data-action="close" class="px-4 py-2 bg-gray-300 rounded-md hover:bg-gray-400">Cancel</button>
+                    <button id="contact-modal-save" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 flex items-center">
+                        <i data-lucide="save" class="h-4 w-4 mr-2"></i> Update
+                    </button>
+                </div>
+            </div>
+        </div>
+        
+        <div id="add-customer-modal" class="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50 hidden">
+            <div class="bg-white p-6 rounded-lg shadow-xl w-full max-w-md">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-xl font-bold">Add New Customer</h2>
+                    <button data-action="close" class="p-1 hover:bg-gray-200 rounded-full"><i data-lucide="x" class="h-5 w-5"></i></button>
+                </div>
+                <div class="space-y-4">
+                     <div>
+                        <label class="block text-sm font-medium text-gray-700">Customer Name *</label>
+                        <input id="add-modal-name" type="text" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md" placeholder="Enter customer name">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Phone Number *</label>
+                        <input id="add-modal-phone" type="text" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md" placeholder="Enter phone number">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Address</label>
+                        <textarea id="add-modal-address" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md" rows="2" placeholder="Enter address"></textarea>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Next Service Date</label>
+                        <input id="add-modal-nextService" type="date" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md">
+                    </div>
+                </div>
+                <div class="flex justify-end gap-3 mt-6">
+                    <button data-action="close" class="px-4 py-2 bg-gray-300 rounded-md hover:bg-gray-400">Cancel</button>
+                    <button id="add-modal-save" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 flex items-center">
+                        <i data-lucide="plus" class="h-4 w-4 mr-2"></i> Add Customer
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
 </html>
