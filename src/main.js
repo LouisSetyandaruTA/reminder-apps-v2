@@ -1,56 +1,115 @@
-import { app, BrowserWindow } from 'electron';
+import { app, BrowserWindow, ipcMain, Notification } from 'electron';
 import path from 'node:path';
-import started from 'electron-squirrel-startup';
+import { GoogleSpreadsheet } from 'google-spreadsheet';
+import { JWT } from 'google-auth-library';
+import creds from './credentials.json' with { type: 'json' };
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
-if (started) {
+if (require('electron-squirrel-startup')) {
   app.quit();
 }
 
+const SPREADSHEET_ID = '1x4AmlaQGgdqHLEHKo_jZlGvyq9XsHigz6r6qGHFll0o'; // <-- GANTI DENGAN ID GOOGLE SHEET ANDA
+
+// --- FUNGSI LOGIKA GOOGLE SHEETS ---
+// Fungsi ini sekarang hanya akan dipanggil saat ada permintaan dari UI
+async function getDataFromSheets() {
+  try {
+    const auth = new JWT({
+      email: creds.client_email,
+      key: creds.private_key,
+      scopes: ['https://www.googleapis.com/auth/spreadsheets'],
+    });
+    const doc = new GoogleSpreadsheet(SPREADSHEET_ID, auth);
+    await doc.loadInfo();
+    console.log('Koneksi Berhasil. Judul:', doc.title);
+
+    const customerSheet = doc.sheetsByTitle['Customers'];
+    const serviceSheet = doc.sheetsByTitle['Services'];
+
+    if (!customerSheet || !serviceSheet) {
+      throw new Error("Pastikan sheet 'Customers' dan 'Services' ada dan sudah di-share.");
+    }
+
+    const customerRows = await customerSheet.getRows();
+    const serviceRows = await serviceSheet.getRows();
+
+    const customersMap = new Map();
+    customerRows.forEach(row => {
+      customersMap.set(row.get('CustomerID'), {
+        name: row.get('Nama'),
+        address: row.get('Alamat'),
+        phone: row.get('No Telp'),
+      });
+    });
+
+    const services = serviceRows.map(row => {
+      const customerInfo = customersMap.get(row.get('CustomerID')) || {};
+      return {
+        serviceID: row.get('ServiceID'),
+        customerID: row.get('CustomerID'),
+        serviceDate: row.get('ServiceDate'),
+        status: row.get('Status'),
+        notes: row.get('Notes'),
+        handler: row.get('Handler'),
+        ...customerInfo,
+        _row: row,
+      };
+    });
+    return services;
+  } catch (error) {
+    console.error('MAIN: Error saat mengambil data:', error);
+    throw error; // Lemparkan error agar bisa ditangkap oleh handler
+  }
+}
+
+// --- FUNGSI UNTUK MEMBUAT JENDELA ---
 const createWindow = () => {
-  // Create the browser window.
   const mainWindow = new BrowserWindow({
-    width: 800,
-    height: 600,
+    width: 1200,
+    height: 800,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
     },
   });
 
-  // and load the index.html of the app.
   if (MAIN_WINDOW_VITE_DEV_SERVER_URL) {
     mainWindow.loadURL(MAIN_WINDOW_VITE_DEV_SERVER_URL);
   } else {
-    mainWindow.loadFile(path.join(__dirname, `../renderer/${MAIN_WINDOW_VITE_NAME}/main.html`));
+    mainWindow.loadFile(path.join(__dirname, `../renderer/${MAIN_WINDOW_VITE_NAME}/index.html`));
   }
 
-  // Open the DevTools.
+  // Buka DevTools hanya dalam mode development
+  if (!app.isPackaged) {
+    mainWindow.webContents.openDevTools();
+  }
+
   mainWindow.webContents.openDevTools();
 };
 
-// This method will be called when Electron has finished
-// initialization and is ready to create browser windows.
-// Some APIs can only be used after this event occurs.
+// --- HANDLER UNTUK PERMINTAAN DARI UI ---
+ipcMain.handle('refresh-data', async () => {
+  try {
+    const data = await getDataFromSheets();
+    return { success: true, data };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+// ... (Tambahkan handler lain seperti update-status, dll. di sini)
+
+
+// --- SIKLUS HIDUP APLIKASI ---
 app.whenReady().then(() => {
   createWindow();
-
-  // On OS X it's common to re-create a window in the app when the
-  // dock icon is clicked and there are no other windows open.
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) {
-      createWindow();
-    }
+    if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
 });
 
-// Quit when all windows are closed, except on macOS. There, it's common
-// for applications and their menu bar to stay active until the user quits
-// explicitly with Cmd + Q.
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
     app.quit();
   }
 });
-
-// In this file you can include the rest of your app's specific main process
-// code. You can also put them in separate files and import them here.

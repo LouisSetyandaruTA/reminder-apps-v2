@@ -9,7 +9,10 @@
     "package": "electron-forge package",
     "make": "electron-forge make",
     "publish": "electron-forge publish",
-    "lint": "echo \"No linting configured\""
+    "dev": "vite",
+    "build": "vite build",
+    "electron": "electron .",
+    "electron:dev": "vite --mode development"
   },
   "keywords": [],
   "author": {
@@ -27,11 +30,16 @@
     "@electron-forge/plugin-fuses": "^7.8.3",
     "@electron-forge/plugin-vite": "^7.8.3",
     "@electron/fuses": "^1.8.0",
+    "@vitejs/plugin-react": "^5.0.0",
     "electron": "37.2.6",
-    "vite": "^5.4.19"
+    "vite": "^5.4.19",
+    "vite-plugin-electron": "^0.29.0",
+    "vite-plugin-electron-renderer": "^0.14.6"
   },
   "dependencies": {
     "electron-squirrel-startup": "^1.0.1",
+    "google-auth-library": "^10.2.1",
+    "google-spreadsheet": "^5.0.2",
     "lucide-react": "^0.539.0",
     "react": "^19.1.1",
     "react-dom": "^19.1.1"
