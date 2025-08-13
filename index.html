@@ -27,55 +27,64 @@
                     </div>
                 </div>
 
-                <div class="grid grid-cols-2 md:grid-cols-6 gap-4 mb-6">
-                    <div class="bg-blue-50 p-4 rounded-lg text-center">
-                        <p class="text-blue-600 text-sm font-medium">Total Customers</p>
-                        <p id="stats-total" class="text-2xl font-bold text-blue-900">0</p>
-                    </div>
-                    <div class="bg-red-50 p-4 rounded-lg text-center">
-                        <p class="text-red-600 text-sm font-medium">Overdue Services</p>
-                        <p id="stats-overdue" class="text-2xl font-bold text-red-900">0</p>
-                    </div>
-                    <div class="bg-yellow-50 p-4 rounded-lg text-center">
-                        <p class="text-yellow-600 text-sm font-medium">Due This Month</p>
-                        <p id="stats-due-month" class="text-2xl font-bold text-yellow-900">0</p>
-                    </div>
-                    <div class="bg-green-50 p-4 rounded-lg text-center">
-                        <p class="text-green-600 text-sm font-medium">Contacted</p>
-                        <p id="stats-contacted" class="text-2xl font-bold text-green-900">0</p>
-                    </div>
-                    <div class="bg-gray-50 p-4 rounded-lg text-center">
-                        <p class="text-gray-600 text-sm font-medium">Not Contacted</p>
-                        <p id="stats-not-contacted" class="text-2xl font-bold text-gray-900">0</p>
-                    </div>
-                    <div class="bg-purple-50 p-4 rounded-lg text-center">
-                        <p class="text-purple-600 text-sm font-medium">Contact Overdue</p>
-                        <p id="stats-contact-overdue" class="text-2xl font-bold text-purple-900">0</p>
-                    </div>
-                </div>
+            <div class="space-y-4">
 
-                <div class="flex flex-wrap gap-4 items-center">
-                    <div class="flex items-center">
-                        <i data-lucide="search" class="text-gray-400 mr-2 h-5 w-5"></i>
-                        <input id="search-input" type="text" placeholder="Search customers..." class="border border-gray-300 rounded-lg px-3 py-2 w-64">
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div class="bg-blue-100 p-4 rounded-lg text-center border border-blue-200">
+            <p class="text-blue-700 text-sm font-medium">Total Customers</p>
+            <p id="stats-total" class="text-2xl font-bold text-blue-900">0</p>
+        </div>
+        <div class="bg-red-100 p-4 rounded-lg text-center border border-red-200">
+            <p class="text-red-700 text-sm font-medium">Overdue Services</p>
+            <p id="stats-overdue" class="text-2xl font-bold text-red-900">0</p>
+        </div>
+        <div class="bg-yellow-100 p-4 rounded-lg text-center border border-yellow-200">
+            <p class="text-yellow-700 text-sm font-medium">Due This Month</p>
+            <p id="stats-due-month" class="text-2xl font-bold text-yellow-900">0</p>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div class="bg-green-100 p-4 rounded-lg text-center border border-green-200">
+            <p class="text-green-700 text-sm font-medium">Contacted</p>
+            <p id="stats-contacted" class="text-2xl font-bold text-green-900">0</p>
+        </div>
+        <div class="bg-gray-200 p-4 rounded-lg text-center border border-gray-300">
+            <p class="text-gray-700 text-sm font-medium">Not Contacted</p>
+            <p id="stats-not-contacted" class="text-2xl font-bold text-gray-900">0</p>
+        </div>
+        <div class="bg-gray-200 p-4 rounded-lg text-center border border-gray-300">
+            <p class="text-gray-700 text-sm font-medium">Contact Overdue</p>
+            <p id="stats-contact-overdue" class="text-2xl font-bold text-gray-900">0</p>
+        </div>
+    </div>
+
+</div>
+
+                <div class="flex flex-wrap gap-4 items-center border border-gray-200 rounded-lg p-3">
+                    <div class="flex items-center flex-grow relative">
+                        <i data-lucide="search" class="text-gray-400 ml-2 h-5 w-5 absolute"></i>
+                        <input id="search-input" type="text" placeholder="Search customers..." class="border-gray-300 rounded-lg px-3 py-2 pl-10 w-full focus:ring-blue-500 focus:border-blue-500">
                     </div>
-                    <div class="flex items-center">
-                        <i data-lucide="filter" class="text-gray-400 mr-2 h-5 w-5"></i>
-                        <select id="filter-select" class="border border-gray-300 rounded-lg px-3 py-2">
-                            <option value="all">All Customers</option>
-                            <option value="overdue">Overdue Services</option>
-                            <option value="upcoming">Due This Month</option>
-                            <option value="contacted">Contacted</option>
-                            <option value="not_contacted">Not Contacted</option>
-                            <option value="contact_overdue">Contact Overdue</option>
-                        </select>
-                    </div>
-                    <div class="flex items-center">
-                        <span class="text-gray-600 mr-2">Sort by:</span>
-                        <select id="sort-select" class="border border-gray-300 rounded-lg px-3 py-2">
-                            <option value="nextService">Next Service Date</option>
-                            <option value="name">Customer Name</option>
-                        </select>
+                    <div class="flex items-center gap-4">
+                        <div class="flex items-center">
+                            <i data-lucide="filter" class="text-gray-400 mr-2 h-5 w-5"></i>
+                            <select id="filter-select" class="border-gray-300 rounded-lg px-3 py-2">
+                                <option value="all">All Customers</option>
+                                <option value="overdue">Overdue Services</option>
+                                <option value="upcoming">Due This Month</option>
+                                <option value="contacted">Contacted</option>
+                                <option value="not_contacted">Not Contacted</option>
+                                <option value="contact_overdue">Contact Overdue</option>
+                            </select>
+                        </div>
+                        <div class="flex items-center">
+                            <span class="text-gray-600 mr-2">Sort by:</span>
+                            <select id="sort-select" class="border-gray-300 rounded-lg px-3 py-2">
+                                <option value="nextService">Next Service Date</option>
+                                <option value="name">Customer Name</option>
+                            </select>
+                        </div>
                     </div>
                 </div>
             </div>
