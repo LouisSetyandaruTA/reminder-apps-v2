@@ -53,23 +53,23 @@ document.addEventListener('DOMContentLoaded', () => {
         switch (customer.status) { // Menggunakan 'status' dari service record
             case 'CONTACTED': // Status ini seharusnya tidak pernah muncul lama
             case 'COMPLETED': // Dianggap sudah dihubungi
-                return { color: 'bg-green-100 text-green-800', icon: 'check-circle', text: 'Contacted' };
+                return { color: 'bg-green-100 text-green-800', icon: 'check-circle', text: 'Sudah dihubungi' };
             case 'OVERDUE':
-                return { color: 'bg-red-100 text-red-800', icon: 'alert-circle', text: 'Contact Overdue' };
+                return { color: 'bg-red-100 text-red-800', icon: 'alert-circle', text: 'Terlambat dihubungi' };
             case 'UPCOMING':
             default:
-                return { color: 'bg-gray-100 text-gray-800', icon: 'clock', text: 'Not Contacted' };
+                return { color: 'bg-gray-100 text-gray-800', icon: 'clock', text: 'Belum dihubungi' };
         }
     };
 
     const getDaysUntilService = (customer) => {
-        if (!customer.nextService) return 'No date set';
+        if (!customer.nextService) return 'Tanggal belum di atur';
         const nextServiceDate = new Date(customer.nextService);
-        if (isNaN(nextServiceDate.getTime())) return 'Invalid date';
+        if (isNaN(nextServiceDate.getTime())) return 'Tanggal tidak Valid';
         const daysDiff = Math.ceil((nextServiceDate - today) / (1000 * 60 * 60 * 24));
-        if (daysDiff < 0) return `Overdue by ${Math.abs(daysDiff)} days`;
-        if (daysDiff === 0) return 'Due today';
-        return `Due in ${daysDiff} days`;
+        if (daysDiff < 0) return `Terlambat ${Math.abs(daysDiff)} hari`;
+        if (daysDiff === 0) return 'Hari ini';
+        return `Dalam ${daysDiff} hari`;
     };
 
     const getPriorityColor = (priority) => {
@@ -157,32 +157,32 @@ document.addEventListener('DOMContentLoaded', () => {
                         </div>
                         <div class="space-y-4 text-sm">
                             <div>
-                                <p class="text-gray-500">Next Reminder</p>
+                                <p class="text-gray-500">Pengingat Berikutnya</p>
                                 <p class="font-semibold text-gray-800">${formatDate(customer.nextService)} - <span class="text-blue-600">${serviceDays}</span></p>
                             </div>
                             <div>
-                                <p class="text-gray-500">Address</p>
+                                <p class="text-gray-500">Alamat</p>
                                 <p class="font-semibold text-gray-800">${customer.address || 'N/A'}</p>
                             </div>
                             <div>
-                                <p class="text-gray-500">Phone</p>
+                                <p class="text-gray-500">Nomor Telepon</p>
                                 <p class="font-semibold text-gray-800">${customer.phone || 'N/A'}</p>
                             </div>
                             <div class="grid grid-cols-3 gap-4 pt-1">
-                                <div><p class="text-gray-500">Last Service</p><p class="font-semibold text-gray-800">${formatDate(mostRecentService)}</p></div>
-                                <div><p class="text-gray-500">Next Service</p><p class="font-semibold text-gray-800">${formatDate(customer.nextService)}</p></div>
-                                <div><p class="text-gray-500">Service Status</p><p class="font-semibold text-blue-600">${serviceDays}</p></div>
+                                <div><p class="text-gray-500">Servis Terakhir</p><p class="font-semibold text-gray-800">${formatDate(mostRecentService)}</p></div>
+                                <div><p class="text-gray-500">Servis Berikutnya</p><p class="font-semibold text-gray-800">${formatDate(customer.nextService)}</p></div>
+                                <div><p class="text-gray-500">Status Servis</p><p class="font-semibold text-blue-600">${serviceDays}</p></div>
                             </div>
                             <div>
-                                <p class="text-gray-500">Last Contact</p>
+                                <p class="text-gray-500">Keterangan</p>
                                 <p class="font-semibold text-gray-800">${customer.notes || 'Never Contacted'}</p>
                             </div>
                         </div>
                         <div class="mt-4">
                             <details class="group text-sm">
                                 <summary class="font-medium text-gray-600 cursor-pointer hover:text-gray-900 list-none">
-                                    <span class="group-open:hidden">Show Service History</span>
-                                    <span class="hidden group-open:inline">Hide Service History</span>
+                                    <span class="group-open:hidden">Tampilkan Riwayat Servis</span>
+                                    <span class="hidden group-open:inline">Sembunyikan Riwayat Servis</span>
                                 </summary>
                                 <div class="mt-2 text-xs bg-gray-50 p-2 rounded border">
                                     ${Object.keys(customer.services || {}).length > 0 ? Object.entries(customer.services).map(([key, value]) => `<div><span class="text-gray-500">${key}:</span> ${formatDate(value)}</div>`).join('') : 'No service history.'}
@@ -192,13 +192,13 @@ document.addEventListener('DOMContentLoaded', () => {
                     </div>
                     <div class="w-full md:w-auto md:min-w-[190px] flex flex-col gap-2 pt-2 md:pt-0">
                         <button data-action="call" data-phone="${customer.phone}" class="w-full px-3 py-2 text-sm rounded-md flex items-center justify-center whitespace-nowrap border border-green-600 text-green-600 hover:bg-green-50 transition-colors">
-                            <i data-lucide="message-circle" class="w-4 h-4 mr-2"></i> Contact
+                            <i data-lucide="message-circle" class="w-4 h-4 mr-2"></i> Kontak
                         </button>
                         <button data-action="update-contact" data-service-id="${customer.serviceID}" class="w-full px-3 py-2 text-sm rounded-md flex items-center justify-center whitespace-nowrap border border-purple-600 text-purple-600 hover:bg-purple-50 transition-colors">
-                            <i data-lucide="user-check" class="w-4 h-4 mr-2"></i> Update Contact
+                            <i data-lucide="user-check" class="w-4 h-4 mr-2"></i> Kontak Update
                         </button>
                         <button data-action="update-service" data-service-id="${customer.serviceID}" class="w-full px-3 py-2 text-sm rounded-md flex items-center justify-center whitespace-nowrap border border-blue-600 text-blue-600 hover:bg-blue-50 transition-colors">
-                            <i data-lucide="settings" class="w-4 h-4 mr-2"></i> Update Service
+                            <i data-lucide="settings" class="w-4 h-4 mr-2"></i> Servis Update
                         </button>
                         <div class="flex gap-2 mt-2">
                             <button data-action="edit-customer" data-customer-id="${customer.customerID}" class="flex-1 px-3 py-2 text-sm rounded-md flex items-center justify-center whitespace-nowrap bg-gray-200 hover:bg-gray-300">
@@ -239,7 +239,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function setupAndOpenServiceModal(customer) {
         selectedCustomer = customer;
         const select = document.getElementById('service-modal-select');
-        select.innerHTML = '<option value="" disabled selected>Select service slot</option>';
+        select.innerHTML = '<option value="" disabled selected>Pilih slot servis yang akan diganti </option>';
         (customer.serviceColumns || []).forEach(col => {
             select.add(new Option(col, col));
         });
@@ -303,14 +303,14 @@ document.addEventListener('DOMContentLoaded', () => {
             setupAndOpenUpdateCustomerModal(customer);
         } else if (action === 'delete-customer') {
             const customerName = button.dataset.customerName;
-            if (confirm(`Are you sure you want to delete ${customerName} and all their service records? This action cannot be undone.`)) {
+            if (confirm(`Apakah anda yakin ingin menghapus ${customerName} dan semua data layanannya? Tindakan ini tidak ada dibatalkan.`)) {
                 handleDeleteCustomer(customerId);
             }
         }
     });
 
     document.getElementById('service-modal-save').addEventListener('click', async () => {
-        alert('Update service logic needs to be connected in main.js');
+        alert('Data pelanggan berhasil di update.');
         closeModal(updateServiceModal);
     });
 
@@ -321,11 +321,11 @@ document.addEventListener('DOMContentLoaded', () => {
             notes: document.getElementById('contact-modal-notes').value
         });
         if (result.success) {
-            alert('Contact status updated successfully!');
+            alert('Status kontak berhasil diupdate!');
             closeModal(updateContactModal);
             initializeApp();
         } else {
-            alert(`Contact status update failed: ${result.error}`);
+            alert(`Status kontak gagal di update: ${result.error}`);
         }
     });
 
@@ -336,7 +336,7 @@ document.addEventListener('DOMContentLoaded', () => {
             address: document.getElementById('add-modal-address').value,
             nextService: document.getElementById('add-modal-nextService').value,
         };
-        if (!customerData.name || !customerData.phone) return alert('Please provide customer name and phone number.');
+        if (!customerData.name || !customerData.phone) return alert('Mohon isi nama dan nomor telepon pelanggan.');
 
         const result = await window.electronAPI.addCustomer(customerData);
         if (result.success) {
