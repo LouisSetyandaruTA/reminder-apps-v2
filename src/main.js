@@ -3,12 +3,14 @@ import path from 'node:path';
 import { GoogleSpreadsheet } from 'google-spreadsheet';
 import { JWT } from 'google-auth-library';
 import creds from './credentials.json' with { type: 'json' };
+import { URL } from 'url';
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 if (require('electron-squirrel-startup')) {
   app.quit();
 }
 
+const __dirname = decodeURI(new URL('.', import.meta.url).pathname)
 const SPREADSHEET_ID = '1x4AmlaQGgdqHLEHKo_jZlGvyq9XsHigz6r6qGHFll0o'; // <-- GANTI DENGAN ID GOOGLE SHEET ANDA
 
 // --- FUNGSI LOGIKA GOOGLE SHEETS ---
