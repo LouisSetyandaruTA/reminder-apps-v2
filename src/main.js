@@ -38,6 +38,7 @@ async function getDataFromSheets() {
   const customersMap = new Map();
   customerRows.forEach(row => {
     customersMap.set(row.get('CustomerID'), {
+      customerID: row.get('CustomerID'), // Pastikan customerID juga dikirim
       name: row.get('Nama'),
       address: row.get('Alamat'),
       phone: row.get('No Telp'),
@@ -152,6 +153,28 @@ ipcMain.handle('update-contact-status', async (event, { serviceID, newStatus, no
     return { success: false, error: error.message };
   }
 });
+
+// --- FUNGSI BARU UNTUK UPDATE TANGGAL SERVIS ---
+ipcMain.handle('update-service-date', async (event, { serviceID, newDate }) => {
+  try {
+    const { serviceSheet } = await getSheets();
+    const rows = await serviceSheet.getRows();
+    const rowToUpdate = rows.find(r => r.get('ServiceID') === serviceID);
+
+    if (!rowToUpdate) {
+      throw new Error('Service record not found.');
+    }
+
+    rowToUpdate.set('ServiceDate', newDate);
+    await rowToUpdate.save();
+
+    return { success: true };
+  } catch (error) {
+    console.error('Error updating service date:', error);
+    return { success: false, error: error.message };
+  }
+});
+
 
 ipcMain.handle('add-customer', async (event, customerData) => {
   try {

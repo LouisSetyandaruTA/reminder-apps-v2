@@ -34,7 +34,6 @@ document.addEventListener('DOMContentLoaded', () => {
             .sort((a, b) => b - a)[0] || null;
     };
 
-    // (DIPERBAIKI) Logika prioritas sekarang lebih dinamis dan akurat
     const calculatePriority = (customer) => {
         if (!customer.nextService) return 'Rendah';
         const nextServiceDate = new Date(customer.nextService);
@@ -42,17 +41,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const daysDiff = Math.ceil((nextServiceDate - today) / (1000 * 60 * 60 * 24));
 
-        if (daysDiff < 0) return 'Sangat Mendesak'; // Sudah lewat
-        if (daysDiff <= 7) return 'Tinggi'; // Dalam 1 minggu
-        if (daysDiff <= 30) return 'Sedang'; // Dalam 1 bulan
-        return 'Rendah'; // Lebih dari 1 bulan
+        if (daysDiff < 0) return 'Sangat Mendesak';
+        if (daysDiff <= 7) return 'Tinggi';
+        if (daysDiff <= 30) return 'Sedang';
+        return 'Rendah';
     };
 
     const getContactStatusDisplay = (customer) => {
-        // (DIPERBAIKI) Logika status disederhanakan
-        switch (customer.status) { // Menggunakan 'status' dari service record
-            case 'CONTACTED': // Status ini seharusnya tidak pernah muncul lama
-            case 'COMPLETED': // Dianggap sudah dihubungi
+        switch (customer.status) {
+            case 'CONTACTED':
+            case 'COMPLETED':
                 return { color: 'bg-green-100 text-green-800', icon: 'check-circle', text: 'Sudah dihubungi' };
             case 'OVERDUE':
                 return { color: 'bg-red-100 text-red-800', icon: 'alert-circle', text: 'Terlambat dihubungi' };
@@ -112,7 +110,6 @@ document.addEventListener('DOMContentLoaded', () => {
                         const daysDiff = Math.ceil((nextServiceDate - today) / (1000 * 60 * 60 * 24));
                         return daysDiff >= 0 && daysDiff <= 30;
                     }
-                    // (DIPERBAIKI) Logika filter status
                     case 'contacted': return customer.status === 'COMPLETED';
                     case 'not_contacted': return customer.status === 'UPCOMING';
                     case 'contact_overdue': return customer.status === 'OVERDUE';
@@ -175,7 +172,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             </div>
                             <div>
                                 <p class="text-gray-500">Keterangan</p>
-                                <p class="font-semibold text-gray-800">${customer.notes || 'Never Contacted'}</p>
+                                <p class="font-semibold text-gray-800">${customer.notes || 'Belum pernah dihubungi'}</p>
                             </div>
                         </div>
                         <div class="mt-4">
@@ -185,7 +182,7 @@ document.addEventListener('DOMContentLoaded', () => {
                                     <span class="hidden group-open:inline">Sembunyikan Riwayat Servis</span>
                                 </summary>
                                 <div class="mt-2 text-xs bg-gray-50 p-2 rounded border">
-                                    ${Object.keys(customer.services || {}).length > 0 ? Object.entries(customer.services).map(([key, value]) => `<div><span class="text-gray-500">${key}:</span> ${formatDate(value)}</div>`).join('') : 'No service history.'}
+                                    ${Object.keys(customer.services || {}).length > 0 ? Object.entries(customer.services).map(([key, value]) => `<div><span class="text-gray-500">${key}:</span> ${formatDate(value)}</div>`).join('') : 'Tidak ada riwayat servis.'}
                                 </div>
                             </details>
                         </div>
@@ -213,7 +210,6 @@ document.addEventListener('DOMContentLoaded', () => {
             customerListContainer.appendChild(card);
         });
 
-        // (DIPERBAIKI) Logika statistik sekarang menghitung semua data, bukan hanya yang ditampilkan
         document.getElementById('stats-total').textContent = customers.length;
         document.getElementById('stats-overdue').textContent = customers.filter(c => { const d = new Date(c.nextService); return !isNaN(d.getTime()) && d < today; }).length;
         document.getElementById('stats-due-month').textContent = customers.filter(c => { const d = new Date(c.nextService); if (isNaN(d.getTime())) return false; const diff = Math.ceil((d - today) / (1000 * 60 * 60 * 24)); return diff >= 0 && diff <= 30; }).length;
@@ -236,14 +232,13 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
+    // (DIPERBAIKI) Fungsi ini disederhanakan dan diperbaiki
     function setupAndOpenServiceModal(customer) {
         selectedCustomer = customer;
-        const select = document.getElementById('service-modal-select');
-        select.innerHTML = '<option value="" disabled selected>Pilih slot servis yang akan diganti </option>';
-        (customer.serviceColumns || []).forEach(col => {
-            select.add(new Option(col, col));
-        });
-        document.getElementById('service-modal-date').value = new Date().toISOString().split('T')[0];
+        document.getElementById('service-modal-customer-name').textContent = customer.name;
+        // Mengisi tanggal yang ada saat ini untuk kemudahan pengguna
+        const currentDate = customer.nextService ? new Date(customer.nextService).toISOString().split('T')[0] : new Date().toISOString().split('T')[0];
+        document.getElementById('service-modal-date').value = currentDate;
         openModal(updateServiceModal);
     }
 
@@ -251,7 +246,7 @@ document.addEventListener('DOMContentLoaded', () => {
         selectedCustomer = customer;
         document.getElementById('contact-modal-name').textContent = customer.name;
         document.getElementById('contact-modal-phone').textContent = customer.phone;
-        document.getElementById('contact-modal-status').value = customer.status || 'not_contacted';
+        document.getElementById('contact-modal-status').value = customer.status === 'COMPLETED' ? 'contacted' : (customer.status === 'OVERDUE' ? 'overdue' : 'not_contacted');
         document.getElementById('contact-modal-notes').value = customer.notes || '';
         openModal(updateContactModal);
     }
@@ -292,14 +287,18 @@ document.addEventListener('DOMContentLoaded', () => {
         const customerId = button.dataset.customerId;
 
         const customer = customers.find(c => c.serviceID === serviceId || c.customerID === customerId);
+        if (!customer && action !== 'call') {
+            console.error('Customer not found for action:', action);
+            return;
+        }
 
         if (action === 'call') {
             window.electronAPI.openWhatsApp(button.dataset.phone);
-        } else if (action === 'update-service' && customer) {
+        } else if (action === 'update-service') {
             setupAndOpenServiceModal(customer);
-        } else if (action === 'update-contact' && customer) {
+        } else if (action === 'update-contact') {
             setupAndOpenContactModal(customer);
-        } else if (action === 'edit-customer' && customer) {
+        } else if (action === 'edit-customer') {
             setupAndOpenUpdateCustomerModal(customer);
         } else if (action === 'delete-customer') {
             const customerName = button.dataset.customerName;
@@ -309,15 +308,40 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
+    // (DIPERBAIKI) Logika penyimpanan sekarang memanggil API backend
     document.getElementById('service-modal-save').addEventListener('click', async () => {
-        alert('Data pelanggan berhasil di update.');
-        closeModal(updateServiceModal);
+        if (!selectedCustomer) return alert('Tidak ada pelanggan yang dipilih.');
+
+        const newDate = document.getElementById('service-modal-date').value;
+        if (!newDate) {
+            return alert('Silakan pilih tanggal layanan yang baru.');
+        }
+
+        const result = await window.electronAPI.updateServiceDate({
+            serviceID: selectedCustomer.serviceID,
+            newDate: newDate
+        });
+
+        if (result.success) {
+            alert('Tanggal layanan berhasil diperbarui!');
+            closeModal(updateServiceModal);
+            initializeApp();
+        } else {
+            alert(`Gagal memperbarui tanggal layanan: ${result.error}`);
+        }
     });
 
+
     document.getElementById('contact-modal-save').addEventListener('click', async () => {
+        const statusMap = {
+            'not_contacted': 'UPCOMING',
+            'contacted': 'CONTACTED',
+            'overdue': 'OVERDUE'
+        };
+
         const result = await window.electronAPI.updateContactStatus({
             serviceID: selectedCustomer.serviceID,
-            newStatus: document.getElementById('contact-modal-status').value,
+            newStatus: statusMap[document.getElementById('contact-modal-status').value],
             notes: document.getElementById('contact-modal-notes').value
         });
         if (result.success) {
@@ -340,11 +364,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const result = await window.electronAPI.addCustomer(customerData);
         if (result.success) {
-            alert('Customer added successfully!');
+            alert('Pelanggan baru berhasil ditambahkan!');
             closeModal(addCustomerModal);
             initializeApp();
         } else {
-            alert(`Failed to add customer: ${result.error}`);
+            alert(`Gagal menambah pelanggan: ${result.error}`);
         }
     });
 
@@ -354,7 +378,7 @@ document.addEventListener('DOMContentLoaded', () => {
             phone: document.getElementById('update-modal-phone').value,
             address: document.getElementById('update-modal-address').value,
         };
-        if (!updatedData.name || !updatedData.phone) return alert('Please provide customer name and phone number.');
+        if (!updatedData.name || !updatedData.phone) return alert('Mohon isi nama dan nomor telepon pelanggan.');
 
         const result = await window.electronAPI.updateCustomer({
             customerID: selectedCustomer.customerID,
@@ -362,21 +386,21 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         if (result.success) {
-            alert('Customer data updated successfully!');
+            alert('Data pelanggan berhasil diupdate!');
             closeModal(updateCustomerModal);
             initializeApp();
         } else {
-            alert(`Failed to update customer: ${result.error}`);
+            alert(`Gagal mengupdate data pelanggan: ${result.error}`);
         }
     });
 
     async function handleDeleteCustomer(customerID) {
         const result = await window.electronAPI.deleteCustomer(customerID);
         if (result.success) {
-            alert('Customer deleted successfully!');
+            alert('Pelanggan berhasil dihapus!');
             initializeApp();
         } else {
-            alert(`Failed to delete customer: ${result.error}`);
+            alert(`Gagal menghapus pelanggan: ${result.error}`);
         }
     }
 
@@ -384,13 +408,16 @@ document.addEventListener('DOMContentLoaded', () => {
     async function initializeApp() {
         loadingIndicator.classList.remove('hidden');
         errorIndicator.classList.add('hidden');
+        customerListContainer.innerHTML = ''; // Kosongkan daftar saat memuat
+        emptyState.classList.add('hidden');
+
         try {
             const result = await window.electronAPI.refreshData();
             if (result.success) {
                 customers = result.data || [];
                 renderCustomers();
             } else {
-                throw new Error(result.error || 'Unknown error occurred.');
+                throw new Error(result.error || 'Terjadi kesalahan tidak diketahui.');
             }
         } catch (err) {
             errorMessage.textContent = err.message;
