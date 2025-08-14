@@ -1,64 +1,10 @@
 document.addEventListener('DOMContentLoaded', () => {
-
-    // --- MOCK ELECTRON API & DATA ---
-    const getMockData = () => ([
-        { rowIndex: 0, name: 'Budi Santoso', address: 'Jl. Merdeka 1, Jakarta', phone: '6281234567890', nextService: '2025-07-20', contactStatus: 'contacted', contactNotes: 'Confirmed for next week.', services: { 'Service 1': '2024-07-15' }, serviceColumns: ['Service 1', 'Service 2', 'Service 3'] },
-        { rowIndex: 1, name: 'Citra Lestari', address: 'Jl. Kemerdekaan 2, Bandung', phone: '6281298765432', nextService: '2025-08-25', contactStatus: 'not_contacted', contactNotes: '', services: {}, serviceColumns: ['Service 1', 'Service 2', 'Service 3'] },
-        { rowIndex: 2, name: 'Agus Wijaya', address: 'Jl. Pahlawan 3, Surabaya', phone: '6281211223344', nextService: '2025-09-05', contactStatus: 'overdue', contactNotes: 'Called twice, no answer.', services: { 'Service 1': '2024-08-01' }, serviceColumns: ['Service 1', 'Service 2', 'Service 3'] },
-        { rowIndex: 3, name: 'Dewi Anggraini', address: 'Jl. Nusantara 4, Medan', phone: '6281255667788', nextService: '2026-01-10', contactStatus: null, contactNotes: '', services: {}, serviceColumns: ['Service 1', 'Service 2', 'Service 3'] },
-        { rowIndex: 4, name: 'Eko Prasetyo', address: 'Jl. Garuda 5, Makassar', phone: '6281244332211', nextService: null, contactStatus: 'not_contacted', contactNotes: '', services: {}, serviceColumns: ['Service 1', 'Service 2', 'Service 3'] }
-    ]);
-    
     // --- APPLICATION STATE ---
     let customers = [];
     let selectedCustomer = null;
     let sortBy = 'nextService';
     let filterBy = 'all';
     let searchTerm = '';
-    
-    // --- MOCK API ---
-    const electronAPI = {
-        refreshData: async () => {
-            await new Promise(res => setTimeout(res, 500));
-            customers = getMockData();
-            return { success: true, data: customers };
-        },
-        updateService: async ({ rowIndex, serviceColumn, newDate }) => {
-            const customer = customers.find(c => c.rowIndex === rowIndex);
-            if (customer) {
-                if (!customer.services) customer.services = {};
-                customer.services[serviceColumn] = newDate;
-                return { success: true };
-            }
-            return { success: false, error: 'Customer not found.' };
-        },
-        updateContactStatus: async ({ rowIndex, status, contactDate, notes }) => {
-            const customer = customers.find(c => c.rowIndex === rowIndex);
-            if (customer) {
-                customer.contactStatus = status;
-                customer.contactNotes = notes;
-                return { success: true };
-            }
-            return { success: false, error: 'Customer not found.' };
-        },
-        addCustomer: async (customerData) => {
-            const newCustomer = {
-                ...customerData,
-                rowIndex: customers.length ? Math.max(...customers.map(c => c.rowIndex)) + 1 : 0,
-                services: {},
-                serviceColumns: ['Service 1', 'Service 2', 'Service 3', 'Service 4'],
-                contactStatus: 'not_contacted',
-                contactNotes: ''
-            };
-            customers.push(newCustomer);
-            return { success: true };
-        },
-        openWhatsApp: (phoneNumber) => {
-            if (!phoneNumber) return;
-            const cleanPhone = phoneNumber.replace(/\D/g, '');
-            window.open(`https://wa.me/${cleanPhone}`, '_blank');
-        }
-    };
 
     // --- DOM ELEMENT REFERENCES ---
     const customerListContainer = document.getElementById('customer-list');
@@ -73,7 +19,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const updateServiceModal = document.getElementById('update-service-modal');
     const updateContactModal = document.getElementById('update-contact-modal');
     const addCustomerModal = document.getElementById('add-customer-modal');
-
+    const updateCustomerModal = document.getElementById('update-customer-modal'); // (BARU)
 
     // --- HELPER FUNCTIONS ---
     const today = new Date();
@@ -110,7 +56,7 @@ document.addEventListener('DOMContentLoaded', () => {
             default: return { color: 'bg-gray-100 text-gray-800', icon: 'clock', text: 'Not Contacted' };
         }
     };
-    
+
     const getDaysUntilService = (customer) => {
         if (!customer.nextService) return 'No date set';
         const nextServiceDate = new Date(customer.nextService);
@@ -129,7 +75,7 @@ document.addEventListener('DOMContentLoaded', () => {
             default: return 'bg-gray-100 text-gray-800';
         }
     };
-    
+
     const formatDate = (dateString) => {
         if (!dateString) return 'N/A';
         const date = new Date(dateString);
@@ -141,13 +87,14 @@ document.addEventListener('DOMContentLoaded', () => {
     function renderCustomers() {
         const sortedAndFilteredCustomers = customers
             .filter(customer => {
-                if (!customer.name) return false;
+                if (!customer || !customer.name) return false;
                 const lowerSearchTerm = searchTerm.toLowerCase();
-                const matchesSearch = customer.name.toLowerCase().includes(lowerSearchTerm) ||
-                    (customer.address && customer.address.toLowerCase().includes(lowerSearchTerm)) ||
-                    (customer.phone && customer.phone.toLowerCase().includes(lowerSearchTerm));
+                const matchesSearch = (customer.name || '').toLowerCase().includes(lowerSearchTerm) ||
+                    (customer.address || '').toLowerCase().includes(lowerSearchTerm) ||
+                    (customer.phone || '').toLowerCase().includes(lowerSearchTerm);
                 if (!matchesSearch) return false;
-                switch(filterBy) {
+
+                switch (filterBy) {
                     case 'all': return true;
                     case 'overdue': {
                         const nextServiceDate = new Date(customer.nextService);
@@ -167,16 +114,18 @@ document.addEventListener('DOMContentLoaded', () => {
             })
             .sort((a, b) => {
                 if (sortBy === 'nextService') {
-                    const dateA = new Date(a.nextService);
-                    const dateB = new Date(b.nextService);
-                    if (isNaN(dateA.getTime())) return 1;
-                    if (isNaN(dateB.getTime())) return -1;
+                    const dateA = a.nextService ? new Date(a.nextService) : null;
+                    const dateB = b.nextService ? new Date(b.nextService) : null;
+                    if (!dateA) return 1;
+                    if (!dateB) return -1;
                     return dateA - dateB;
                 }
-                if (sortBy === 'name') return (a.name || '').localeCompare(b.name || '');
+                if (sortBy === 'name') {
+                    return (a.name || '').localeCompare(b.name || '');
+                }
                 return 0;
             });
-        
+
         customerListContainer.innerHTML = '';
         emptyState.classList.toggle('hidden', sortedAndFilteredCustomers.length > 0);
 
@@ -188,6 +137,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const card = document.createElement('div');
             card.className = 'bg-white rounded-lg shadow-sm border border-gray-200 p-4 hover:shadow-md transition-shadow';
+            // (DIUBAH) Menambahkan tombol Edit & Delete
             card.innerHTML = `
                 <div class="flex flex-col md:flex-row justify-between items-start gap-6">
                     <div class="flex-1 w-full">
@@ -234,16 +184,24 @@ document.addEventListener('DOMContentLoaded', () => {
                             </details>
                         </div>
                     </div>
-                    <div class="w-full md:w-auto md:min-w-[190px] flex flex-row md:flex-col gap-2 pt-2 md:pt-0">
-                        <button data-action="call" data-phone="${customer.phone}" class="flex-1 md:w-full px-3 py-2 text-sm rounded-md flex items-center justify-center whitespace-nowrap border border-green-600 text-green-600 hover:bg-green-50 transition-colors">
-                            <i data-lucide="message-circle" class="w-4 h-4 mr-2"></i> Contact via Whatsapp
+                    <div class="w-full md:w-auto md:min-w-[190px] flex flex-col gap-2 pt-2 md:pt-0">
+                        <button data-action="call" data-phone="${customer.phone}" class="w-full px-3 py-2 text-sm rounded-md flex items-center justify-center whitespace-nowrap border border-green-600 text-green-600 hover:bg-green-50 transition-colors">
+                            <i data-lucide="message-circle" class="w-4 h-4 mr-2"></i> Contact
                         </button>
-                        <button data-action="update-contact" data-row-index="${customer.rowIndex}" class="flex-1 md:w-full px-3 py-2 text-sm rounded-md flex items-center justify-center whitespace-nowrap border border-purple-600 text-purple-600 hover:bg-purple-50 transition-colors">
-                            <i data-lucide="user-check" class="w-4 h-4 mr-2"></i> Update Contact Status
+                        <button data-action="update-contact" data-service-id="${customer.serviceID}" class="w-full px-3 py-2 text-sm rounded-md flex items-center justify-center whitespace-nowrap border border-purple-600 text-purple-600 hover:bg-purple-50 transition-colors">
+                            <i data-lucide="user-check" class="w-4 h-4 mr-2"></i> Update Contact
                         </button>
-                        <button data-action="update-service" data-row-index="${customer.rowIndex}" class="flex-1 md:w-full px-3 py-2 text-sm rounded-md flex items-center justify-center whitespace-nowrap border border-blue-600 text-blue-600 hover:bg-blue-50 transition-colors">
-                            <i data-lucide="settings" class="w-4 h-4 mr-2"></i> Update Services
+                        <button data-action="update-service" data-service-id="${customer.serviceID}" class="w-full px-3 py-2 text-sm rounded-md flex items-center justify-center whitespace-nowrap border border-blue-600 text-blue-600 hover:bg-blue-50 transition-colors">
+                            <i data-lucide="settings" class="w-4 h-4 mr-2"></i> Update Service
                         </button>
+                        <div class="flex gap-2 mt-2">
+                            <button data-action="edit-customer" data-customer-id="${customer.customerID}" class="flex-1 px-3 py-2 text-sm rounded-md flex items-center justify-center whitespace-nowrap bg-gray-200 hover:bg-gray-300">
+                                <i data-lucide="edit-3" class="w-4 h-4"></i>
+                            </button>
+                            <button data-action="delete-customer" data-customer-id="${customer.customerID}" data-customer-name="${customer.name}" class="flex-1 px-3 py-2 text-sm rounded-md flex items-center justify-center whitespace-nowrap bg-red-200 text-red-800 hover:bg-red-300">
+                                <i data-lucide="trash-2" class="w-4 h-4"></i>
+                            </button>
+                        </div>
                     </div>
                 </div>`;
             customerListContainer.appendChild(card);
@@ -251,12 +209,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
         document.getElementById('stats-total').textContent = customers.length;
         document.getElementById('stats-overdue').textContent = customers.filter(c => { const d = new Date(c.nextService); return !isNaN(d.getTime()) && d < today; }).length;
-        document.getElementById('stats-due-month').textContent = customers.filter(c => { const d = new Date(c.nextService); if(isNaN(d.getTime())) return false; const diff = Math.ceil((d - today) / (1000*60*60*24)); return diff >= 0 && diff <= 30; }).length;
+        document.getElementById('stats-due-month').textContent = customers.filter(c => { const d = new Date(c.nextService); if (isNaN(d.getTime())) return false; const diff = Math.ceil((d - today) / (1000 * 60 * 60 * 24)); return diff >= 0 && diff <= 30; }).length;
         document.getElementById('stats-contacted').textContent = customers.filter(c => c.contactStatus === 'contacted').length;
         document.getElementById('stats-not-contacted').textContent = customers.filter(c => !c.contactStatus || c.contactStatus === 'not_contacted').length;
         document.getElementById('stats-contact-overdue').textContent = customers.filter(c => c.contactStatus === 'overdue').length;
 
-        lucide.createIcons();
+        if (window.lucide) {
+            window.lucide.createIcons();
+        }
     };
 
     // --- MODAL HANDLING ---
@@ -273,7 +233,7 @@ document.addEventListener('DOMContentLoaded', () => {
         selectedCustomer = customer;
         const select = document.getElementById('service-modal-select');
         select.innerHTML = '<option value="" disabled selected>Select service slot</option>';
-        customer.serviceColumns.forEach(col => {
+        (customer.serviceColumns || []).forEach(col => {
             select.add(new Option(col, col));
         });
         document.getElementById('service-modal-date').value = new Date().toISOString().split('T')[0];
@@ -284,11 +244,11 @@ document.addEventListener('DOMContentLoaded', () => {
         selectedCustomer = customer;
         document.getElementById('contact-modal-name').textContent = customer.name;
         document.getElementById('contact-modal-phone').textContent = customer.phone;
-        document.getElementById('contact-modal-status').value = customer.contactStatus || 'not_contacted';
-        document.getElementById('contact-modal-notes').value = customer.contactNotes || '';
+        document.getElementById('contact-modal-status').value = customer.status || 'not_contacted';
+        document.getElementById('contact-modal-notes').value = customer.notes || '';
         openModal(updateContactModal);
     }
-    
+
     function setupAndOpenAddCustomerModal() {
         addCustomerModal.querySelector('form') ? addCustomerModal.querySelector('form').reset() : (
             document.getElementById('add-modal-name').value = '',
@@ -299,46 +259,62 @@ document.addEventListener('DOMContentLoaded', () => {
         openModal(addCustomerModal);
     }
 
+    // (BARU) Fungsi untuk membuka modal edit customer
+    function setupAndOpenUpdateCustomerModal(customer) {
+        selectedCustomer = customer;
+        document.getElementById('update-modal-name').value = customer.name;
+        document.getElementById('update-modal-phone').value = customer.phone;
+        document.getElementById('update-modal-address').value = customer.address;
+        openModal(updateCustomerModal);
+    }
+
     // --- EVENT LISTENERS ---
     searchInput.addEventListener('input', (e) => { searchTerm = e.target.value; renderCustomers(); });
     filterSelect.addEventListener('change', (e) => { filterBy = e.target.value; renderCustomers(); });
     sortSelect.addEventListener('change', (e) => { sortBy = e.target.value; renderCustomers(); });
-    
+
     document.getElementById('add-customer-btn').addEventListener('click', setupAndOpenAddCustomerModal);
     document.getElementById('refresh-btn').addEventListener('click', initializeApp);
     document.getElementById('retry-btn').addEventListener('click', initializeApp);
 
+    // (DIUBAH) Event listener utama untuk menangani semua aksi
     customerListContainer.addEventListener('click', (e) => {
         const button = e.target.closest('button[data-action]');
         if (!button) return;
-        const action = button.dataset.action;
-        const customer = customers.find(c => c.rowIndex === parseInt(button.dataset.rowIndex, 10));
 
-        if (action === 'call') electronAPI.openWhatsApp(button.dataset.phone);
-        else if (action === 'update-service' && customer) setupAndOpenServiceModal(customer);
-        else if (action === 'update-contact' && customer) setupAndOpenContactModal(customer);
-    });
-    
-    document.getElementById('service-modal-save').addEventListener('click', async () => {
-        const serviceColumn = document.getElementById('service-modal-select').value;
-        const newDate = document.getElementById('service-modal-date').value;
-        if (!serviceColumn || !newDate) return alert('Please select a service slot and a date.');
-        
-        const result = await electronAPI.updateService({ rowIndex: selectedCustomer.rowIndex, serviceColumn, newDate });
-        if (result.success) {
-            alert('Service updated successfully!');
-            closeModal(updateServiceModal);
-            initializeApp();
-        } else {
-            alert(`Service update failed: ${result.error}`);
+        const action = button.dataset.action;
+        const serviceId = button.dataset.serviceId;
+        const customerId = button.dataset.customerId;
+
+        // (DIPERBAIKI) Menggunakan serviceID atau customerID untuk mencari data
+        const customer = customers.find(c => c.serviceID === serviceId || c.customerID === customerId);
+
+        if (action === 'call') {
+            window.electronAPI.openWhatsApp(button.dataset.phone);
+        } else if (action === 'update-service' && customer) {
+            setupAndOpenServiceModal(customer);
+        } else if (action === 'update-contact' && customer) {
+            setupAndOpenContactModal(customer);
+        } else if (action === 'edit-customer' && customer) {
+            setupAndOpenUpdateCustomerModal(customer);
+        } else if (action === 'delete-customer') {
+            const customerName = button.dataset.customerName;
+            if (confirm(`Are you sure you want to delete ${customerName} and all their service records? This action cannot be undone.`)) {
+                handleDeleteCustomer(customerId);
+            }
         }
     });
 
+    document.getElementById('service-modal-save').addEventListener('click', async () => {
+        // Logika ini perlu disesuaikan jika Anda ingin mengimplementasikannya
+        alert('Update service logic needs to be connected in main.js');
+        closeModal(updateServiceModal);
+    });
+
     document.getElementById('contact-modal-save').addEventListener('click', async () => {
-        const result = await electronAPI.updateContactStatus({
-            rowIndex: selectedCustomer.rowIndex,
-            status: document.getElementById('contact-modal-status').value,
-            contactDate: new Date().toISOString().split('T')[0],
+        const result = await window.electronAPI.updateContactStatus({
+            serviceID: selectedCustomer.serviceID,
+            newStatus: document.getElementById('contact-modal-status').value,
             notes: document.getElementById('contact-modal-notes').value
         });
         if (result.success) {
@@ -358,8 +334,8 @@ document.addEventListener('DOMContentLoaded', () => {
             nextService: document.getElementById('add-modal-nextService').value,
         };
         if (!customerData.name || !customerData.phone) return alert('Please provide customer name and phone number.');
-        
-        const result = await electronAPI.addCustomer(customerData);
+
+        const result = await window.electronAPI.addCustomer(customerData);
         if (result.success) {
             alert('Customer added successfully!');
             closeModal(addCustomerModal);
@@ -369,13 +345,48 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
+    // (BARU) Event listener untuk menyimpan perubahan data customer
+    document.getElementById('update-modal-save').addEventListener('click', async () => {
+        const updatedData = {
+            name: document.getElementById('update-modal-name').value,
+            phone: document.getElementById('update-modal-phone').value,
+            address: document.getElementById('update-modal-address').value,
+        };
+        if (!updatedData.name || !updatedData.phone) return alert('Please provide customer name and phone number.');
+
+        const result = await window.electronAPI.updateCustomer({
+            customerID: selectedCustomer.customerID,
+            updatedData: updatedData
+        });
+
+        if (result.success) {
+            alert('Customer data updated successfully!');
+            closeModal(updateCustomerModal);
+            initializeApp();
+        } else {
+            alert(`Failed to update customer: ${result.error}`);
+        }
+    });
+
+    // (BARU) Fungsi untuk menangani penghapusan customer
+    async function handleDeleteCustomer(customerID) {
+        const result = await window.electronAPI.deleteCustomer(customerID);
+        if (result.success) {
+            alert('Customer deleted successfully!');
+            initializeApp();
+        } else {
+            alert(`Failed to delete customer: ${result.error}`);
+        }
+    }
+
     // --- INITIALIZATION ---
     async function initializeApp() {
         loadingIndicator.classList.remove('hidden');
         errorIndicator.classList.add('hidden');
         try {
-            const result = await electronAPI.refreshData();
+            const result = await window.electronAPI.refreshData();
             if (result.success) {
+                customers = result.data || [];
                 renderCustomers();
             } else {
                 throw new Error(result.error || 'Unknown error occurred.');
@@ -385,7 +396,9 @@ document.addEventListener('DOMContentLoaded', () => {
             errorIndicator.classList.remove('hidden');
         } finally {
             loadingIndicator.classList.add('hidden');
-            lucide.createIcons();
+            if (window.lucide) {
+                window.lucide.createIcons();
+            }
         }
     }
 
