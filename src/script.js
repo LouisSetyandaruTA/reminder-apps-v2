@@ -149,7 +149,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             <span class="px-2 py-0.5 rounded-full text-xs font-medium ${getPriorityColor(priority)} mr-2">${priority}</span>
                             <span class="px-2 py-0.5 rounded-full text-xs font-medium border ${contactStatusDisplay.color} flex items-center">
                                 <i data-lucide="${contactStatusDisplay.icon}" class="w-3.5 h-3.5"></i>
-                                <span class="ml-1.5">${contactStatusDisplay.text}</span>
+                                <span class="ml-1.5">${customer.status}</span>
                             </span>
                         </div>
                         <div class="space-y-4 text-sm">
