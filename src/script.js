@@ -34,41 +34,47 @@ document.addEventListener('DOMContentLoaded', () => {
             .sort((a, b) => b - a)[0] || null;
     };
 
+    // (DIPERBAIKI) Logika prioritas sekarang lebih dinamis dan akurat
     const calculatePriority = (customer) => {
         if (!customer.nextService) return 'Rendah';
         const nextServiceDate = new Date(customer.nextService);
         if (isNaN(nextServiceDate.getTime())) return 'Rendah';
+
         const daysDiff = Math.ceil((nextServiceDate - today) / (1000 * 60 * 60 * 24));
-        if (daysDiff < 0) return 'Tinggi';
-        if (daysDiff <= 7) return 'Tinggi';
-        if (daysDiff <= 30) return 'Sedang';
-        return 'Rendah';
+
+        if (daysDiff < 0) return 'Sangat Mendesak'; // Sudah lewat
+        if (daysDiff <= 7) return 'Tinggi'; // Dalam 1 minggu
+        if (daysDiff <= 30) return 'Sedang'; // Dalam 1 bulan
+        return 'Rendah'; // Lebih dari 1 bulan
     };
 
     const getContactStatusDisplay = (customer) => {
-        const nextService = new Date(customer.nextService);
-        if (customer.contactStatus === 'contacted' && !isNaN(nextService.getTime()) && nextService < today) {
-            return { color: 'bg-red-100 text-red-800', icon: 'alert-circle', text: 'Belum Dihubungi' };
-        }
-        switch (customer.contactStatus) {
-            case 'contacted': return { color: 'bg-green-100 text-green-800', icon: 'check-circle', text: 'Sudah Dihubungi' };
-            case 'overdue': return { color: 'bg-red-100 text-red-800', icon: 'alert-circle', text: 'Kontak Terlambat' };
-            default: return { color: 'bg-gray-100 text-gray-800', icon: 'clock', text: 'Belum Dihubungi' };
+        // (DIPERBAIKI) Logika status disederhanakan
+        switch (customer.status) { // Menggunakan 'status' dari service record
+            case 'CONTACTED': // Status ini seharusnya tidak pernah muncul lama
+            case 'COMPLETED': // Dianggap sudah dihubungi
+                return { color: 'bg-green-100 text-green-800', icon: 'check-circle', text: 'Contacted' };
+            case 'OVERDUE':
+                return { color: 'bg-red-100 text-red-800', icon: 'alert-circle', text: 'Contact Overdue' };
+            case 'UPCOMING':
+            default:
+                return { color: 'bg-gray-100 text-gray-800', icon: 'clock', text: 'Not Contacted' };
         }
     };
 
     const getDaysUntilService = (customer) => {
-        if (!customer.nextService) return 'Belum ada tanggal';
+        if (!customer.nextService) return 'No date set';
         const nextServiceDate = new Date(customer.nextService);
-        if (isNaN(nextServiceDate.getTime())) return 'Tanggal tidak valid';
+        if (isNaN(nextServiceDate.getTime())) return 'Invalid date';
         const daysDiff = Math.ceil((nextServiceDate - today) / (1000 * 60 * 60 * 24));
-        if (daysDiff < 0) return `Terlambat ${Math.abs(daysDiff)} hari`;
-        if (daysDiff === 0) return 'Jatuh tempo hari ini';
-        return `Jatuh tempo dalam ${daysDiff} hari`;
+        if (daysDiff < 0) return `Overdue by ${Math.abs(daysDiff)} days`;
+        if (daysDiff === 0) return 'Due today';
+        return `Due in ${daysDiff} days`;
     };
 
     const getPriorityColor = (priority) => {
         switch (priority) {
+            case 'Sangat Mendesak': return 'bg-red-500 text-white';
             case 'Tinggi': return 'bg-red-100 text-red-800';
             case 'Sedang': return 'bg-yellow-100 text-yellow-800';
             case 'Rendah': return 'bg-green-100 text-green-800';
@@ -79,7 +85,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const formatDate = (dateString) => {
         if (!dateString) return 'N/A';
         const date = new Date(dateString);
-        if (isNaN(date.getTime())) return 'Tanggal Tidak Valid';
+        if (isNaN(date.getTime())) return 'Invalid Date';
         return date.toLocaleDateString('id-ID', { day: '2-digit', month: '2-digit', year: 'numeric' });
     };
 
@@ -106,9 +112,10 @@ document.addEventListener('DOMContentLoaded', () => {
                         const daysDiff = Math.ceil((nextServiceDate - today) / (1000 * 60 * 60 * 24));
                         return daysDiff >= 0 && daysDiff <= 30;
                     }
-                    case 'contacted': return customer.contactStatus === 'contacted';
-                    case 'not_contacted': return !customer.contactStatus || customer.contactStatus === 'not_contacted';
-                    case 'contact_overdue': return customer.contactStatus === 'overdue';
+                    // (DIPERBAIKI) Logika filter status
+                    case 'contacted': return customer.status === 'COMPLETED';
+                    case 'not_contacted': return customer.status === 'UPCOMING';
+                    case 'contact_overdue': return customer.status === 'OVERDUE';
                     default: return true;
                 }
             })
@@ -142,7 +149,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     <div class="flex-1 w-full">
                         <div class="flex items-center mb-4 flex-wrap">
                             <h3 class="text-xl font-bold text-gray-900 mr-3">${customer.name}</h3>
-                            <span class="px-2 py-0.5 rounded-full text-xs font-medium ${getPriorityColor(priority)} mr-2">Prioritas ${priority}</span>
+                            <span class="px-2 py-0.5 rounded-full text-xs font-medium ${getPriorityColor(priority)} mr-2">${priority}</span>
                             <span class="px-2 py-0.5 rounded-full text-xs font-medium border ${contactStatusDisplay.color} flex items-center">
                                 <i data-lucide="${contactStatusDisplay.icon}" class="w-3.5 h-3.5"></i>
                                 <span class="ml-1.5">${contactStatusDisplay.text}</span>
@@ -150,48 +157,48 @@ document.addEventListener('DOMContentLoaded', () => {
                         </div>
                         <div class="space-y-4 text-sm">
                             <div>
-                                <p class="text-gray-500">Pengingat Berikutnya</p>
+                                <p class="text-gray-500">Next Reminder</p>
                                 <p class="font-semibold text-gray-800">${formatDate(customer.nextService)} - <span class="text-blue-600">${serviceDays}</span></p>
                             </div>
                             <div>
-                                <p class="text-gray-500">Alamat</p>
+                                <p class="text-gray-500">Address</p>
                                 <p class="font-semibold text-gray-800">${customer.address || 'N/A'}</p>
                             </div>
                             <div>
-                                <p class="text-gray-500">Telepon</p>
+                                <p class="text-gray-500">Phone</p>
                                 <p class="font-semibold text-gray-800">${customer.phone || 'N/A'}</p>
                             </div>
                             <div class="grid grid-cols-3 gap-4 pt-1">
-                                <div><p class="text-gray-500">Layanan Terakhir</p><p class="font-semibold text-gray-800">${formatDate(mostRecentService)}</p></div>
-                                <div><p class="text-gray-500">Layanan Berikutnya</p><p class="font-semibold text-gray-800">${formatDate(customer.nextService)}</p></div>
-                                <div><p class="text-gray-500">Status Layanan</p><p class="font-semibold text-blue-600">${serviceDays}</p></div>
+                                <div><p class="text-gray-500">Last Service</p><p class="font-semibold text-gray-800">${formatDate(mostRecentService)}</p></div>
+                                <div><p class="text-gray-500">Next Service</p><p class="font-semibold text-gray-800">${formatDate(customer.nextService)}</p></div>
+                                <div><p class="text-gray-500">Service Status</p><p class="font-semibold text-blue-600">${serviceDays}</p></div>
                             </div>
                             <div>
-                                <p class="text-gray-500">Kontak Terakhir</p>
-                                <p class="font-semibold text-gray-800">${customer.contactNotes || 'Belum Pernah Dihubungi'}</p>
+                                <p class="text-gray-500">Last Contact</p>
+                                <p class="font-semibold text-gray-800">${customer.notes || 'Never Contacted'}</p>
                             </div>
                         </div>
                         <div class="mt-4">
                             <details class="group text-sm">
                                 <summary class="font-medium text-gray-600 cursor-pointer hover:text-gray-900 list-none">
-                                    <span class="group-open:hidden">Tampilkan Riwayat Layanan</span>
-                                    <span class="hidden group-open:inline">Sembunyikan Riwayat Layanan</span>
+                                    <span class="group-open:hidden">Show Service History</span>
+                                    <span class="hidden group-open:inline">Hide Service History</span>
                                 </summary>
                                 <div class="mt-2 text-xs bg-gray-50 p-2 rounded border">
-                                    ${Object.keys(customer.services || {}).length > 0 ? Object.entries(customer.services).map(([key, value]) => `<div><span class="text-gray-500">${key}:</span> ${formatDate(value)}</div>`).join('') : 'Tidak ada riwayat layanan.'}
+                                    ${Object.keys(customer.services || {}).length > 0 ? Object.entries(customer.services).map(([key, value]) => `<div><span class="text-gray-500">${key}:</span> ${formatDate(value)}</div>`).join('') : 'No service history.'}
                                 </div>
                             </details>
                         </div>
                     </div>
                     <div class="w-full md:w-auto md:min-w-[190px] flex flex-col gap-2 pt-2 md:pt-0">
                         <button data-action="call" data-phone="${customer.phone}" class="w-full px-3 py-2 text-sm rounded-md flex items-center justify-center whitespace-nowrap border border-green-600 text-green-600 hover:bg-green-50 transition-colors">
-                            <i data-lucide="message-circle" class="w-4 h-4 mr-2"></i> Hubungi
+                            <i data-lucide="message-circle" class="w-4 h-4 mr-2"></i> Contact
                         </button>
                         <button data-action="update-contact" data-service-id="${customer.serviceID}" class="w-full px-3 py-2 text-sm rounded-md flex items-center justify-center whitespace-nowrap border border-purple-600 text-purple-600 hover:bg-purple-50 transition-colors">
-                            <i data-lucide="user-check" class="w-4 h-4 mr-2"></i> Perbarui Kontak
+                            <i data-lucide="user-check" class="w-4 h-4 mr-2"></i> Update Contact
                         </button>
                         <button data-action="update-service" data-service-id="${customer.serviceID}" class="w-full px-3 py-2 text-sm rounded-md flex items-center justify-center whitespace-nowrap border border-blue-600 text-blue-600 hover:bg-blue-50 transition-colors">
-                            <i data-lucide="settings" class="w-4 h-4 mr-2"></i> Perbarui Layanan
+                            <i data-lucide="settings" class="w-4 h-4 mr-2"></i> Update Service
                         </button>
                         <div class="flex gap-2 mt-2">
                             <button data-action="edit-customer" data-customer-id="${customer.customerID}" class="flex-1 px-3 py-2 text-sm rounded-md flex items-center justify-center whitespace-nowrap bg-gray-200 hover:bg-gray-300">
@@ -206,12 +213,13 @@ document.addEventListener('DOMContentLoaded', () => {
             customerListContainer.appendChild(card);
         });
 
+        // (DIPERBAIKI) Logika statistik sekarang menghitung semua data, bukan hanya yang ditampilkan
         document.getElementById('stats-total').textContent = customers.length;
         document.getElementById('stats-overdue').textContent = customers.filter(c => { const d = new Date(c.nextService); return !isNaN(d.getTime()) && d < today; }).length;
         document.getElementById('stats-due-month').textContent = customers.filter(c => { const d = new Date(c.nextService); if (isNaN(d.getTime())) return false; const diff = Math.ceil((d - today) / (1000 * 60 * 60 * 24)); return diff >= 0 && diff <= 30; }).length;
-        document.getElementById('stats-contacted').textContent = customers.filter(c => c.contactStatus === 'contacted').length;
-        document.getElementById('stats-not-contacted').textContent = customers.filter(c => !c.contactStatus || c.contactStatus === 'not_contacted').length;
-        document.getElementById('stats-contact-overdue').textContent = customers.filter(c => c.contactStatus === 'overdue').length;
+        document.getElementById('stats-contacted').textContent = customers.filter(c => c.status === 'COMPLETED').length;
+        document.getElementById('stats-not-contacted').textContent = customers.filter(c => c.status === 'UPCOMING').length;
+        document.getElementById('stats-contact-overdue').textContent = customers.filter(c => c.status === 'OVERDUE').length;
 
         if (window.lucide) {
             window.lucide.createIcons();
@@ -231,7 +239,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function setupAndOpenServiceModal(customer) {
         selectedCustomer = customer;
         const select = document.getElementById('service-modal-select');
-        select.innerHTML = '<option value="" disabled selected>Pilih slot layanan</option>';
+        select.innerHTML = '<option value="" disabled selected>Select service slot</option>';
         (customer.serviceColumns || []).forEach(col => {
             select.add(new Option(col, col));
         });
@@ -295,14 +303,14 @@ document.addEventListener('DOMContentLoaded', () => {
             setupAndOpenUpdateCustomerModal(customer);
         } else if (action === 'delete-customer') {
             const customerName = button.dataset.customerName;
-            if (confirm(`Apakah Anda yakin ingin menghapus ${customerName} dan semua riwayat layanannya? Tindakan ini tidak dapat dibatalkan.`)) {
+            if (confirm(`Are you sure you want to delete ${customerName} and all their service records? This action cannot be undone.`)) {
                 handleDeleteCustomer(customerId);
             }
         }
     });
 
     document.getElementById('service-modal-save').addEventListener('click', async () => {
-        alert('Logika perbarui layanan perlu dihubungkan di main.js');
+        alert('Update service logic needs to be connected in main.js');
         closeModal(updateServiceModal);
     });
 
@@ -313,11 +321,11 @@ document.addEventListener('DOMContentLoaded', () => {
             notes: document.getElementById('contact-modal-notes').value
         });
         if (result.success) {
-            alert('Status kontak berhasil diperbarui!');
+            alert('Contact status updated successfully!');
             closeModal(updateContactModal);
             initializeApp();
         } else {
-            alert(`Gagal memperbarui status kontak: ${result.error}`);
+            alert(`Contact status update failed: ${result.error}`);
         }
     });
 
@@ -328,15 +336,15 @@ document.addEventListener('DOMContentLoaded', () => {
             address: document.getElementById('add-modal-address').value,
             nextService: document.getElementById('add-modal-nextService').value,
         };
-        if (!customerData.name || !customerData.phone) return alert('Mohon berikan nama dan nomor telepon pelanggan.');
+        if (!customerData.name || !customerData.phone) return alert('Please provide customer name and phone number.');
 
         const result = await window.electronAPI.addCustomer(customerData);
         if (result.success) {
-            alert('Pelanggan berhasil ditambahkan!');
+            alert('Customer added successfully!');
             closeModal(addCustomerModal);
             initializeApp();
         } else {
-            alert(`Gagal menambahkan pelanggan: ${result.error}`);
+            alert(`Failed to add customer: ${result.error}`);
         }
     });
 
@@ -346,7 +354,7 @@ document.addEventListener('DOMContentLoaded', () => {
             phone: document.getElementById('update-modal-phone').value,
             address: document.getElementById('update-modal-address').value,
         };
-        if (!updatedData.name || !updatedData.phone) return alert('Mohon berikan nama dan nomor telepon pelanggan.');
+        if (!updatedData.name || !updatedData.phone) return alert('Please provide customer name and phone number.');
 
         const result = await window.electronAPI.updateCustomer({
             customerID: selectedCustomer.customerID,
@@ -354,21 +362,21 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         if (result.success) {
-            alert('Data pelanggan berhasil diperbarui!');
+            alert('Customer data updated successfully!');
             closeModal(updateCustomerModal);
             initializeApp();
         } else {
-            alert(`Gagal memperbarui pelanggan: ${result.error}`);
+            alert(`Failed to update customer: ${result.error}`);
         }
     });
 
     async function handleDeleteCustomer(customerID) {
         const result = await window.electronAPI.deleteCustomer(customerID);
         if (result.success) {
-            alert('Pelanggan berhasil dihapus!');
+            alert('Customer deleted successfully!');
             initializeApp();
         } else {
-            alert(`Gagal menghapus pelanggan: ${result.error}`);
+            alert(`Failed to delete customer: ${result.error}`);
         }
     }
 
@@ -382,7 +390,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 customers = result.data || [];
                 renderCustomers();
             } else {
-                throw new Error(result.error || 'Terjadi kesalahan tidak diketahui.');
+                throw new Error(result.error || 'Unknown error occurred.');
             }
         } catch (err) {
             errorMessage.textContent = err.message;
