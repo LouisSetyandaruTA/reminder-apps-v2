@@ -12,9 +12,8 @@ if (require('electron-squirrel-startup')) {
   app.quit();
 }
 
-const SPREADSHEET_ID = '1x4AmlaQGgdqHLEHKo_jZlGvyq9XsHigz6r6qGHFll0o'; // PASTIKAN ID INI BENAR
+const SPREADSHEET_ID = '1x4AmlaQGgdqHLEHKo_jZlGvyq9XsHigz6r6qGHFll0o';
 
-// --- FUNGSI LOGIKA GOOGLE SHEETS ---
 async function getSheets() {
   const auth = new JWT({
     email: creds.client_email,
@@ -31,7 +30,6 @@ async function getSheets() {
   return { doc, customerSheet, serviceSheet };
 }
 
-// (DIPERBAIKI) Fungsi ini sekarang lebih bersih dan efisien
 async function getDataFromSheets() {
   const { customerSheet, serviceSheet } = await getSheets();
   const customerRows = await customerSheet.getRows();
@@ -46,7 +44,6 @@ async function getDataFromSheets() {
     });
   });
 
-  // (PENTING) Logika untuk menemukan 'nextService' yang benar
   const serviceGroups = {};
   serviceRows.forEach(row => {
     const customerID = row.get('CustomerID');
@@ -68,7 +65,6 @@ async function getDataFromSheets() {
     const customerServices = serviceGroups[customerID];
     const customerInfo = customersMap.get(customerID) || {};
 
-    // Cari servis berikutnya yang belum selesai
     const upcomingServices = customerServices
       .filter(s => s.status !== 'COMPLETED')
       .sort((a, b) => new Date(a.serviceDate) - new Date(b.serviceDate));
