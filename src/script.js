@@ -25,13 +25,12 @@ document.addEventListener('DOMContentLoaded', () => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    const getMostRecentService = (services) => {
-        if (!services || Object.keys(services).length === 0) return null;
-        return Object.values(services)
-            .filter(date => date && date.trim() !== '')
-            .map(date => new Date(date))
-            .filter(date => !isNaN(date.getTime()))
-            .sort((a, b) => b - a)[0] || null;
+    const getMostRecentService = (serviceHistory) => {
+        if (!serviceHistory || serviceHistory.length === 0) return null;
+        const sortedServices = [...serviceHistory]
+            .filter(s => new Date(s.serviceDate) < new Date() || s.status === 'COMPLETED')
+            .sort((a, b) => new Date(b.serviceDate) - new Date(a.serviceDate));
+        return sortedServices.length > 0 ? sortedServices[0].serviceDate : null;
     };
 
     const calculatePriority = (customer) => {
@@ -137,7 +136,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const priority = calculatePriority(customer);
             const contactStatusDisplay = getContactStatusDisplay(customer);
             const serviceDays = getDaysUntilService(customer);
-            const mostRecentService = getMostRecentService(customer.services);
+            const mostRecentServiceDate = getMostRecentService(customer.serviceHistory);
 
             const card = document.createElement('div');
             card.className = 'bg-white rounded-lg shadow-sm border border-gray-200 p-4 hover:shadow-md transition-shadow';
@@ -149,7 +148,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             <span class="px-2 py-0.5 rounded-full text-xs font-medium ${getPriorityColor(priority)} mr-2">${priority}</span>
                             <span class="px-2 py-0.5 rounded-full text-xs font-medium border ${contactStatusDisplay.color} flex items-center">
                                 <i data-lucide="${contactStatusDisplay.icon}" class="w-3.5 h-3.5"></i>
-                                <span class="ml-1.5">${customer.status}</span>
+                                <span class="ml-1.5">${contactStatusDisplay.text}</span>
                             </span>
                         </div>
                         <div class="space-y-4 text-sm">
@@ -166,9 +165,13 @@ document.addEventListener('DOMContentLoaded', () => {
                                 <p class="font-semibold text-gray-800">${customer.phone || 'N/A'}</p>
                             </div>
                             <div class="grid grid-cols-3 gap-4 pt-1">
-                                <div><p class="text-gray-500">Servis Terakhir</p><p class="font-semibold text-gray-800">${formatDate(mostRecentService)}</p></div>
+                                <div><p class="text-gray-500">Servis Terakhir</p><p class="font-semibold text-gray-800">${formatDate(mostRecentServiceDate)}</p></div>
                                 <div><p class="text-gray-500">Servis Berikutnya</p><p class="font-semibold text-gray-800">${formatDate(customer.nextService)}</p></div>
-                                <div><p class="text-gray-500">Status Servis</p><p class="font-semibold text-blue-600">${serviceDays}</p></div>
+                                <div><p class="text-gray-500">Status Servis</p><p class="font-semibold text-blue-600">${customer.status || 'N/A'}</p></div>
+                            </div>
+                            <div>
+                                <p class="text-gray-500">Teknisi</p>
+                                <p class="font-semibold text-gray-800">${customer.handler}</p>
                             </div>
                             <div>
                                 <p class="text-gray-500">Keterangan</p>
@@ -181,8 +184,32 @@ document.addEventListener('DOMContentLoaded', () => {
                                     <span class="group-open:hidden">Tampilkan Riwayat Servis</span>
                                     <span class="hidden group-open:inline">Sembunyikan Riwayat Servis</span>
                                 </summary>
-                                <div class="mt-2 text-xs bg-gray-50 p-2 rounded border">
-                                    ${Object.keys(customer.services || {}).length > 0 ? Object.entries(customer.services).map(([key, value]) => `<div><span class="text-gray-500">${key}:</span> ${formatDate(value)}</div>`).join('') : 'Tidak ada riwayat servis.'}
+                                <div class="mt-2 text-xs bg-gray-50 p-2 rounded border overflow-x-auto">
+                                    ${customer.serviceHistory && customer.serviceHistory.length > 0
+                    ? `<table class="min-w-full divide-y divide-gray-200">
+                                              <thead class="bg-gray-100">
+                                                  <tr>
+                                                      <th scope="col" class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">No</th>
+                                                      <th scope="col" class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tanggal</th>
+                                                      <th scope="col" class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Catatan</th>
+                                                      <th scope="col" class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Teknisi</th>
+                                                  </tr>
+                                              </thead>
+                                              <tbody class="bg-white divide-y divide-gray-200">
+                                                  ${customer.serviceHistory
+                        .sort((a, b) => new Date(b.serviceDate) - new Date(a.serviceDate))
+                        .map((service, index) => `
+                                                      <tr>
+                                                          <td class="px-3 py-2 whitespace-nowrap">${index + 1}</td>
+                                                          <td class="px-3 py-2 whitespace-nowrap">${formatDate(service.serviceDate)}</td>
+                                                          <td class="px-3 py-2 whitespace-normal break-words">${service.notes || '-'}</td>
+                                                          <td class="px-3 py-2 whitespace-nowrap">${service.handler || '-'}</td>
+                                                      </tr>
+                                                  `).join('')}
+                                              </tbody>
+                                          </table>`
+                    : 'Tidak ada riwayat servis.'
+                }
                                 </div>
                             </details>
                         </div>
@@ -232,13 +259,13 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // (DIPERBAIKI) Fungsi ini disederhanakan dan diperbaiki
+    // (DIPERBARUI) Mengisi data handler saat modal dibuka
     function setupAndOpenServiceModal(customer) {
         selectedCustomer = customer;
         document.getElementById('service-modal-customer-name').textContent = customer.name;
-        // Mengisi tanggal yang ada saat ini untuk kemudahan pengguna
         const currentDate = customer.nextService ? new Date(customer.nextService).toISOString().split('T')[0] : new Date().toISOString().split('T')[0];
         document.getElementById('service-modal-date').value = currentDate;
+        document.getElementById('service-modal-handler').value = customer.handler || '';
         openModal(updateServiceModal);
     }
 
@@ -252,12 +279,8 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function setupAndOpenAddCustomerModal() {
-        addCustomerModal.querySelector('form') ? addCustomerModal.querySelector('form').reset() : (
-            document.getElementById('add-modal-name').value = '',
-            document.getElementById('add-modal-phone').value = '',
-            document.getElementById('add-modal-address').value = '',
-            document.getElementById('add-modal-nextService').value = ''
-        );
+        const form = addCustomerModal.querySelector('form');
+        if (form) form.reset();
         openModal(addCustomerModal);
     }
 
@@ -308,29 +331,28 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // (DIPERBAIKI) Logika penyimpanan sekarang memanggil API backend
+    // (DIPERBARUI) Mengirim data handler saat menyimpan perubahan layanan
     document.getElementById('service-modal-save').addEventListener('click', async () => {
         if (!selectedCustomer) return alert('Tidak ada pelanggan yang dipilih.');
 
         const newDate = document.getElementById('service-modal-date').value;
-        if (!newDate) {
-            return alert('Silakan pilih tanggal layanan yang baru.');
-        }
+        const newHandler = document.getElementById('service-modal-handler').value;
+        if (!newDate) return alert('Silakan pilih tanggal layanan yang baru.');
 
-        const result = await window.electronAPI.updateServiceDate({
+        const result = await window.electronAPI.updateService({
             serviceID: selectedCustomer.serviceID,
-            newDate: newDate
+            newDate: newDate,
+            newHandler: newHandler
         });
 
         if (result.success) {
-            alert('Tanggal layanan berhasil diperbarui!');
+            alert('Layanan berhasil diperbarui!');
             closeModal(updateServiceModal);
             initializeApp();
         } else {
-            alert(`Gagal memperbarui tanggal layanan: ${result.error}`);
+            alert(`Gagal memperbarui layanan: ${result.error}`);
         }
     });
-
 
     document.getElementById('contact-modal-save').addEventListener('click', async () => {
         const statusMap = {
@@ -353,12 +375,14 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
+    // (DIPERBARUI) Mengirim data handler saat menambah pelanggan baru
     document.getElementById('add-modal-save').addEventListener('click', async () => {
         const customerData = {
             name: document.getElementById('add-modal-name').value,
             phone: document.getElementById('add-modal-phone').value,
             address: document.getElementById('add-modal-address').value,
             nextService: document.getElementById('add-modal-nextService').value,
+            handler: document.getElementById('add-modal-handler').value,
         };
         if (!customerData.name || !customerData.phone) return alert('Mohon isi nama dan nomor telepon pelanggan.');
 
@@ -408,7 +432,7 @@ document.addEventListener('DOMContentLoaded', () => {
     async function initializeApp() {
         loadingIndicator.classList.remove('hidden');
         errorIndicator.classList.add('hidden');
-        customerListContainer.innerHTML = ''; // Kosongkan daftar saat memuat
+        customerListContainer.innerHTML = '';
         emptyState.classList.add('hidden');
 
         try {

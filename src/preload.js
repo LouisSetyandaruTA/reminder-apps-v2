@@ -7,8 +7,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     // Fungsi untuk mengirim perintah update status
     updateContactStatus: (updateInfo) => ipcRenderer.invoke('update-contact-status', updateInfo),
 
-    // (DITAMBAHKAN) Fungsi untuk update tanggal servis
-    updateServiceDate: (serviceInfo) => ipcRenderer.invoke('update-service-date', serviceInfo),
+    // (DIPERBARUI) Fungsi untuk update layanan (tanggal dan handler)
+    updateService: (serviceInfo) => ipcRenderer.invoke('update-service', serviceInfo),
 
     // Fungsi untuk menambah pelanggan baru
     addCustomer: (customerData) => ipcRenderer.invoke('add-customer', customerData),

@@ -8,6 +8,7 @@ import creds from './credentials.json' with { type: 'json' };
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// Handle creating/removing shortcuts on Windows when installing/uninstalling.
 if (require('electron-squirrel-startup')) {
   app.quit();
 }
@@ -38,7 +39,7 @@ async function getDataFromSheets() {
   const customersMap = new Map();
   customerRows.forEach(row => {
     customersMap.set(row.get('CustomerID'), {
-      customerID: row.get('CustomerID'), // Pastikan customerID juga dikirim
+      customerID: row.get('CustomerID'),
       name: row.get('Nama'),
       address: row.get('Alamat'),
       phone: row.get('No Telp'),
@@ -75,12 +76,9 @@ async function getDataFromSheets() {
     if (nextService) {
       combinedData.push({
         ...customerInfo,
-        ...nextService, // Ambil detail dari servis berikutnya
-        services: customerServices.reduce((acc, s) => { // Kirim semua histori servis
-          acc[s.serviceID] = s.serviceDate;
-          return acc;
-        }, {}),
-        nextService: nextService.serviceDate, // Pastikan nextService diisi
+        ...nextService,
+        serviceHistory: customerServices,
+        nextService: nextService.serviceDate,
       });
     }
   }
@@ -92,14 +90,22 @@ async function getDataFromSheets() {
 const createWindow = () => {
   const mainWindow = new BrowserWindow({
     width: 1200, height: 800,
-    webPreferences: { preload: path.join(__dirname, 'preload.js') },
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      nodeIntegration: false,
+      contextIsolation: true,
+    },
   });
+
   if (MAIN_WINDOW_VITE_DEV_SERVER_URL) {
     mainWindow.loadURL(MAIN_WINDOW_VITE_DEV_SERVER_URL);
   } else {
     mainWindow.loadFile(path.join(__dirname, `../renderer/${MAIN_WINDOW_VITE_NAME}/index.html`));
   }
-  if (!app.isPackaged) mainWindow.webContents.openDevTools();
+
+  if (!app.isPackaged) {
+    mainWindow.webContents.openDevTools();
+  }
 };
 
 // --- HANDLER UNTUK PERMINTAAN DARI UI ---
@@ -108,11 +114,11 @@ ipcMain.handle('refresh-data', async () => {
     const data = await getDataFromSheets();
     return { success: true, data };
   } catch (error) {
+    console.error('Error refreshing data:', error);
     return { success: false, error: error.message };
   }
 });
 
-// (DIPERBAIKI) Logika update status disempurnakan
 ipcMain.handle('update-contact-status', async (event, { serviceID, newStatus, notes }) => {
   try {
     const { serviceSheet } = await getSheets();
@@ -135,13 +141,6 @@ ipcMain.handle('update-contact-status', async (event, { serviceID, newStatus, no
         Notes: 'Jadwal servis rutin berikutnya',
         Handler: rowToUpdate.get('Handler'),
       });
-    } else if (newStatus === 'OVERDUE') {
-      const nextAttemptDate = new Date();
-      nextAttemptDate.setDate(nextAttemptDate.getDate() + 7);
-      rowToUpdate.set('Status', 'OVERDUE');
-      rowToUpdate.set('ServiceDate', nextAttemptDate.toISOString().split('T')[0]);
-      rowToUpdate.set('Notes', notes);
-      await rowToUpdate.save();
     } else {
       rowToUpdate.set('Status', newStatus);
       rowToUpdate.set('Notes', notes);
@@ -154,8 +153,8 @@ ipcMain.handle('update-contact-status', async (event, { serviceID, newStatus, no
   }
 });
 
-// --- FUNGSI BARU UNTUK UPDATE TANGGAL SERVIS ---
-ipcMain.handle('update-service-date', async (event, { serviceID, newDate }) => {
+// (DIPERBARUI) Handler ini sekarang mengupdate tanggal dan handler
+ipcMain.handle('update-service', async (event, { serviceID, newDate, newHandler }) => {
   try {
     const { serviceSheet } = await getSheets();
     const rows = await serviceSheet.getRows();
@@ -166,16 +165,17 @@ ipcMain.handle('update-service-date', async (event, { serviceID, newDate }) => {
     }
 
     rowToUpdate.set('ServiceDate', newDate);
+    rowToUpdate.set('Handler', newHandler);
     await rowToUpdate.save();
 
     return { success: true };
   } catch (error) {
-    console.error('Error updating service date:', error);
+    console.error('Error updating service:', error);
     return { success: false, error: error.message };
   }
 });
 
-
+// (DIPERBARUI) Handler ini sekarang menyimpan handler baru
 ipcMain.handle('add-customer', async (event, customerData) => {
   try {
     const { customerSheet, serviceSheet } = await getSheets();
@@ -192,10 +192,12 @@ ipcMain.handle('add-customer', async (event, customerData) => {
         CustomerID: newCustomerId,
         ServiceDate: customerData.nextService,
         Status: 'UPCOMING',
+        Handler: customerData.handler, // Menyimpan handler
       });
     }
     return { success: true };
   } catch (error) {
+    console.error('Error adding customer:', error);
     return { success: false, error: error.message };
   }
 });
@@ -213,6 +215,7 @@ ipcMain.handle('update-customer', async (event, { customerID, updatedData }) => 
     await rowToUpdate.save();
     return { success: true };
   } catch (error) {
+    console.error('Error updating customer:', error);
     return { success: false, error: error.message };
   }
 });
@@ -227,7 +230,7 @@ ipcMain.handle('delete-customer', async (event, customerID) => {
     if (rowToDelete) {
       await rowToDelete.delete();
     } else {
-      throw new Error('Customer not found for deletion.');
+      console.warn(`Customer with ID ${customerID} not found for deletion.`);
     }
 
     const servicesToDelete = serviceRows.filter(r => r.get('CustomerID') === customerID);
@@ -237,6 +240,7 @@ ipcMain.handle('delete-customer', async (event, customerID) => {
 
     return { success: true };
   } catch (error) {
+    console.error('Error deleting customer:', error);
     return { success: false, error: error.message };
   }
 });
@@ -250,8 +254,6 @@ ipcMain.handle('open-whatsapp', (event, phone) => {
 // --- SIKLUS HIDUP APLIKASI ---
 app.whenReady().then(() => {
   createWindow();
-  checkAndSendReminders();
-  setInterval(checkAndSendReminders, 3600000); // Cek setiap jam
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
