@@ -2,6 +2,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- APPLICATION STATE ---
     let customers = [];
     let selectedCustomer = null;
+    let selectedServiceForNoteEdit = {};
     let sortBy = 'nextService';
     let filterBy = 'all';
     let searchTerm = '';
@@ -15,31 +16,88 @@ document.addEventListener('DOMContentLoaded', () => {
     const errorIndicator = document.getElementById('error-indicator');
     const errorMessage = document.getElementById('error-message');
     const emptyState = document.getElementById('empty-state');
-    const modalsContainer = document.getElementById('modals-container');
+    const modals = document.querySelectorAll('#modals-container .fixed');
     const updateServiceModal = document.getElementById('update-service-modal');
     const updateContactModal = document.getElementById('update-contact-modal');
     const addCustomerModal = document.getElementById('add-customer-modal');
     const updateCustomerModal = document.getElementById('update-customer-modal');
+    const updateHistoryNoteModal = document.getElementById('update-history-note-modal');
 
-    // --- HELPER FUNCTIONS ---
+    // --- VALIDATION & HELPER FUNCTIONS ---
+    
+    /**
+     * Menampilkan pesan peringatan di bawah input field.
+     * @param {HTMLElement} inputElement - Elemen input yang akan diberi peringatan.
+     * @param {string} message - Pesan peringatan yang akan ditampilkan.
+     */
+    const showWarning = (inputElement, message) => {
+        hideWarning(inputElement); // Hapus peringatan lama dulu
+        const warningElement = document.createElement('p');
+        warningElement.className = 'input-warning text-red-600 text-xs mt-1';
+        warningElement.textContent = message;
+        inputElement.insertAdjacentElement('afterend', warningElement);
+    };
+
+    /**
+     * Menghilangkan pesan peringatan dari sebuah input field.
+     * @param {HTMLElement} inputElement - Elemen input yang peringatannya akan dihapus.
+     */
+    const hideWarning = (inputElement) => {
+        const parent = inputElement.parentElement;
+        const oldWarning = parent.querySelector('.input-warning');
+        if (oldWarning) {
+            oldWarning.remove();
+        }
+    };
+
+    /**
+     * Fungsi utama untuk memvalidasi form dan mengaktifkan/menonaktifkan tombol simpan.
+     * SEMUA KOLOM DIANGGAP WAJIB DIISI.
+     * @param {HTMLElement} modalElement - Elemen modal yang berisi form.
+     */
+    const validateForm = (modalElement) => {
+        const saveButton = modalElement.querySelector('button[type="submit"]');
+        if (!saveButton) return;
+
+        let isAllValid = true;
+        const inputs = modalElement.querySelectorAll('input[id], textarea[id], select[id]');
+
+        inputs.forEach(input => {
+            hideWarning(input); // Selalu bersihkan peringatan lama setiap kali validasi berjalan
+            
+            // 1. Cek apakah ada kolom yang kosong
+            if (!input.value.trim()) {
+                isAllValid = false;
+            }
+
+            // 2. Cek tipe data spesifik untuk nomor telepon
+            if (input.id.includes('phone')) {
+                if (input.value.trim() && !/^\d+$/.test(input.value.trim())) {
+                    isAllValid = false;
+                    showWarning(input, 'Nomor telepon hanya boleh berisi angka.');
+                }
+            }
+        });
+
+        saveButton.disabled = !isAllValid;
+    };
+
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
     const getMostRecentService = (serviceHistory) => {
         if (!serviceHistory || serviceHistory.length === 0) return null;
         const sortedServices = [...serviceHistory]
-            .filter(s => new Date(s.serviceDate) < new Date() || s.status === 'COMPLETED')
-            .sort((a, b) => new Date(b.serviceDate) - new Date(a.serviceDate));
-        return sortedServices.length > 0 ? sortedServices[0].serviceDate : null;
+            .filter(s => new Date(s.date) < new Date() || s.status === 'COMPLETED')
+            .sort((a, b) => new Date(b.date) - new Date(a.date));
+        return sortedServices.length > 0 ? sortedServices[0].date : null;
     };
 
     const calculatePriority = (customer) => {
         if (!customer.nextService) return 'Rendah';
         const nextServiceDate = new Date(customer.nextService);
         if (isNaN(nextServiceDate.getTime())) return 'Rendah';
-
         const daysDiff = Math.ceil((nextServiceDate - today) / (1000 * 60 * 60 * 24));
-
         if (daysDiff < 0) return 'Sangat Mendesak';
         if (daysDiff <= 7) return 'Tinggi';
         if (daysDiff <= 30) return 'Sedang';
@@ -96,7 +154,6 @@ document.addEventListener('DOMContentLoaded', () => {
                     (customer.address || '').toLowerCase().includes(lowerSearchTerm) ||
                     (customer.phone || '').toLowerCase().includes(lowerSearchTerm);
                 if (!matchesSearch) return false;
-
                 switch (filterBy) {
                     case 'all': return true;
                     case 'overdue': {
@@ -119,8 +176,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (sortBy === 'nextService') {
                     const dateA = a.nextService ? new Date(a.nextService) : null;
                     const dateB = b.nextService ? new Date(b.nextService) : null;
-                    if (!dateA) return 1;
-                    if (!dateB) return -1;
+                    if (!dateA) return 1; if (!dateB) return -1;
                     return dateA - dateB;
                 }
                 if (sortBy === 'name') {
@@ -136,7 +192,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const priority = calculatePriority(customer);
             const contactStatusDisplay = getContactStatusDisplay(customer);
             const serviceDays = getDaysUntilService(customer);
-            const mostRecentServiceDate = getMostRecentService(customer.serviceHistory);
+            const mostRecentServiceDate = getMostRecentService(customer.services);
 
             const card = document.createElement('div');
             card.className = 'bg-white rounded-lg shadow-sm border border-gray-200 p-4 hover:shadow-md transition-shadow';
@@ -152,31 +208,16 @@ document.addEventListener('DOMContentLoaded', () => {
                             </span>
                         </div>
                         <div class="space-y-4 text-sm">
-                            <div>
-                                <p class="text-gray-500">Pengingat Berikutnya</p>
-                                <p class="font-semibold text-gray-800">${formatDate(customer.nextService)} - <span class="text-blue-600">${serviceDays}</span></p>
-                            </div>
-                            <div>
-                                <p class="text-gray-500">Alamat</p>
-                                <p class="font-semibold text-gray-800">${customer.address || 'N/A'}</p>
-                            </div>
-                            <div>
-                                <p class="text-gray-500">Nomor Telepon</p>
-                                <p class="font-semibold text-gray-800">${customer.phone || 'N/A'}</p>
-                            </div>
+                            <div><p class="text-gray-500">Pengingat Berikutnya</p><p class="font-semibold text-gray-800">${formatDate(customer.nextService)} - <span class="text-blue-600">${serviceDays}</span></p></div>
+                            <div><p class="text-gray-500">Alamat</p><p class="font-semibold text-gray-800">${customer.address || 'N/A'}</p></div>
+                            <div><p class="text-gray-500">Nomor Telepon</p><p class="font-semibold text-gray-800">${customer.phone || 'N/A'}</p></div>
                             <div class="grid grid-cols-3 gap-4 pt-1">
                                 <div><p class="text-gray-500">Servis Terakhir</p><p class="font-semibold text-gray-800">${formatDate(mostRecentServiceDate)}</p></div>
                                 <div><p class="text-gray-500">Servis Berikutnya</p><p class="font-semibold text-gray-800">${formatDate(customer.nextService)}</p></div>
                                 <div><p class="text-gray-500">Status Servis</p><p class="font-semibold text-blue-600">${customer.status || 'N/A'}</p></div>
                             </div>
-                            <div>
-                                <p class="text-gray-500">Teknisi</p>
-                                <p class="font-semibold text-gray-800">${customer.handler}</p>
-                            </div>
-                            <div>
-                                <p class="text-gray-500">Keterangan</p>
-                                <p class="font-semibold text-gray-800">${customer.notes || 'Belum pernah dihubungi'}</p>
-                            </div>
+                            <div><p class="text-gray-500">Teknisi</p><p class="font-semibold text-gray-800">${customer.handler || 'N/A'}</p></div>
+                            <div><p class="text-gray-500">Keterangan</p><p class="font-semibold text-gray-800">${customer.notes || 'Belum pernah dihubungi'}</p></div>
                         </div>
                         <div class="mt-4">
                             <details class="group text-sm">
@@ -185,52 +226,54 @@ document.addEventListener('DOMContentLoaded', () => {
                                     <span class="hidden group-open:inline">Sembunyikan Riwayat Servis</span>
                                 </summary>
                                 <div class="mt-2 text-xs bg-gray-50 p-2 rounded border overflow-x-auto">
-                                    ${customer.serviceHistory && customer.serviceHistory.length > 0
-                    ? `<table class="min-w-full divide-y divide-gray-200">
+                                    ${customer.services && customer.services.length > 0
+                                        ? `<table class="min-w-full divide-y divide-gray-200">
                                               <thead class="bg-gray-100">
                                                   <tr>
                                                       <th scope="col" class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">No</th>
                                                       <th scope="col" class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tanggal</th>
                                                       <th scope="col" class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Catatan</th>
                                                       <th scope="col" class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Teknisi</th>
+                                                      <th scope="col" class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Aksi</th>
                                                   </tr>
                                               </thead>
                                               <tbody class="bg-white divide-y divide-gray-200">
-                                                  ${customer.serviceHistory
-                        .sort((a, b) => new Date(b.serviceDate) - new Date(a.serviceDate))
-                        .map((service, index) => `
+                                                  ${customer.services
+                                                    .sort((a, b) => new Date(b.date) - new Date(a.date))
+                                                    .map((service, index) => `
                                                       <tr>
                                                           <td class="px-3 py-2 whitespace-nowrap">${index + 1}</td>
-                                                          <td class="px-3 py-2 whitespace-nowrap">${formatDate(service.serviceDate)}</td>
+                                                          <td class="px-3 py-2 whitespace-nowrap">${formatDate(service.date)}</td>
                                                           <td class="px-3 py-2 whitespace-normal break-words">${service.notes || '-'}</td>
                                                           <td class="px-3 py-2 whitespace-nowrap">${service.handler || '-'}</td>
+                                                          <td class="px-3 py-2 whitespace-nowrap">
+                                                            <button data-action="edit-note"
+                                                                    data-service-id="${service.serviceID}"
+                                                                    data-service-date="${service.date}"
+                                                                    data-current-notes="${service.notes || ''}"
+                                                                    data-current-handler="${service.handler || ''}"
+                                                                    data-customer-name="${customer.name}"
+                                                                    class="px-2 py-1 text-xs rounded bg-gray-200 text-gray-800 hover:bg-gray-300">
+                                                                Edit
+                                                            </button>
+                                                          </td>
                                                       </tr>
                                                   `).join('')}
                                               </tbody>
                                           </table>`
-                    : 'Tidak ada riwayat servis.'
-                }
+                                        : 'Tidak ada riwayat servis.'
+                                    }
                                 </div>
                             </details>
                         </div>
                     </div>
                     <div class="w-full md:w-auto md:min-w-[190px] flex flex-col gap-2 pt-2 md:pt-0">
-                        <button data-action="call" data-phone="${customer.phone}" class="w-full px-3 py-2 text-sm rounded-md flex items-center justify-center whitespace-nowrap border border-green-600 text-green-600 hover:bg-green-50 transition-colors">
-                            <i data-lucide="message-circle" class="w-4 h-4 mr-2"></i> Kontak
-                        </button>
-                        <button data-action="update-contact" data-service-id="${customer.serviceID}" class="w-full px-3 py-2 text-sm rounded-md flex items-center justify-center whitespace-nowrap border border-purple-600 text-purple-600 hover:bg-purple-50 transition-colors">
-                            <i data-lucide="user-check" class="w-4 h-4 mr-2"></i> Kontak Update
-                        </button>
-                        <button data-action="update-service" data-service-id="${customer.serviceID}" class="w-full px-3 py-2 text-sm rounded-md flex items-center justify-center whitespace-nowrap border border-blue-600 text-blue-600 hover:bg-blue-50 transition-colors">
-                            <i data-lucide="settings" class="w-4 h-4 mr-2"></i> Servis Update
-                        </button>
+                        <button data-action="call" data-phone="${customer.phone}" class="w-full px-3 py-2 text-sm rounded-md flex items-center justify-center whitespace-nowrap border border-green-600 text-green-600 hover:bg-green-50 transition-colors"><i data-lucide="message-circle" class="w-4 h-4 mr-2"></i> Kontak</button>
+                        <button data-action="update-contact" data-service-id="${customer.serviceID}" class="w-full px-3 py-2 text-sm rounded-md flex items-center justify-center whitespace-nowrap border border-purple-600 text-purple-600 hover:bg-purple-50 transition-colors"><i data-lucide="user-check" class="w-4 h-4 mr-2"></i> Kontak Update</button>
+                        <button data-action="update-service" data-service-id="${customer.serviceID}" class="w-full px-3 py-2 text-sm rounded-md flex items-center justify-center whitespace-nowrap border border-blue-600 text-blue-600 hover:bg-blue-50 transition-colors"><i data-lucide="settings" class="w-4 h-4 mr-2"></i> Servis Update</button>
                         <div class="flex gap-2 mt-2">
-                            <button data-action="edit-customer" data-customer-id="${customer.customerID}" class="flex-1 px-3 py-2 text-sm rounded-md flex items-center justify-center whitespace-nowrap bg-gray-200 hover:bg-gray-300">
-                                <i data-lucide="edit-3" class="w-4 h-4"></i>
-                            </button>
-                            <button data-action="delete-customer" data-customer-id="${customer.customerID}" data-customer-name="${customer.name}" class="flex-1 px-3 py-2 text-sm rounded-md flex items-center justify-center whitespace-nowrap bg-red-200 text-red-800 hover:bg-red-300">
-                                <i data-lucide="trash-2" class="w-4 h-4"></i>
-                            </button>
+                            <button data-action="edit-customer" data-customer-id="${customer.customerID}" class="flex-1 px-3 py-2 text-sm rounded-md flex items-center justify-center whitespace-nowrap bg-gray-200 hover:bg-gray-300"><i data-lucide="edit-3" class="w-4 h-4"></i></button>
+                            <button data-action="delete-customer" data-customer-id="${customer.customerID}" data-customer-name="${customer.name}" class="flex-1 px-3 py-2 text-sm rounded-md flex items-center justify-center whitespace-nowrap bg-red-200 text-red-800 hover:bg-red-300"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
                         </div>
                     </div>
                 </div>`;
@@ -250,16 +293,38 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     // --- MODAL HANDLING ---
-    function openModal(modal) { modal.classList.remove('hidden'); }
-    function closeModal(modal) { modal.classList.add('hidden'); }
+    function openModal(modal) {
+        modal.classList.remove('hidden');
+        validateForm(modal); // Validasi form saat modal dibuka
+    }
+    function closeModal(modal) {
+        if(modal) {
+            // Hapus semua peringatan saat modal ditutup
+            modal.querySelectorAll('.input-warning').forEach(el => el.remove());
+            modal.classList.add('hidden');
+        }
+    }
 
-    modalsContainer.addEventListener('click', (e) => {
-        if (e.target.closest('[data-action="close"]')) {
-            closeModal(e.target.closest('.fixed'));
+    modals.forEach(modal => {
+        modal.addEventListener('click', (e) => {
+            if (e.target.closest('[data-action="close"]')) {
+                closeModal(modal);
+            }
+        });
+        // Tambahkan event listener untuk validasi real-time
+        modal.addEventListener('input', () => validateForm(modal));
+    });
+
+    // Listener untuk tombol Escape
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+            const openModal = document.querySelector('#modals-container .fixed:not(.hidden)');
+            if (openModal) {
+                closeModal(openModal);
+            }
         }
     });
 
-    // (DIPERBARUI) Mengisi data handler saat modal dibuka
     function setupAndOpenServiceModal(customer) {
         selectedCustomer = customer;
         document.getElementById('service-modal-customer-name').textContent = customer.name;
@@ -277,10 +342,17 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('contact-modal-notes').value = customer.notes || '';
         openModal(updateContactModal);
     }
+    
+    function setupAndOpenHistoryNoteModal({ serviceId, serviceDate, currentNotes, currentHandler, customerName }) {
+        selectedServiceForNoteEdit = { serviceId };
+        document.getElementById('history-note-modal-info').textContent = `Mengubah catatan untuk ${customerName} pada tanggal ${formatDate(serviceDate)}`;
+        document.getElementById('history-note-modal-notes').value = currentNotes;
+        document.getElementById('history-note-modal-handler').value = currentHandler;
+        openModal(updateHistoryNoteModal);
+    }
 
     function setupAndOpenAddCustomerModal() {
-        const form = addCustomerModal.querySelector('form');
-        if (form) form.reset();
+        addCustomerModal.querySelector('form').reset();
         openModal(addCustomerModal);
     }
 
@@ -308,12 +380,20 @@ document.addEventListener('DOMContentLoaded', () => {
         const action = button.dataset.action;
         const serviceId = button.dataset.serviceId;
         const customerId = button.dataset.customerId;
-
-        const customer = customers.find(c => c.serviceID === serviceId || c.customerID === customerId);
-        if (!customer && action !== 'call') {
-            console.error('Customer not found for action:', action);
+        
+        if (action === 'edit-note') {
+            setupAndOpenHistoryNoteModal({
+                serviceId: button.dataset.serviceId,
+                serviceDate: button.dataset.serviceDate,
+                currentNotes: button.dataset.currentNotes,
+                currentHandler: button.dataset.currentHandler,
+                customerName: button.dataset.customerName,
+            });
             return;
         }
+
+        const customer = customers.find(c => c.serviceID === serviceId || c.customerID === customerId);
+        if (!customer && action !== 'call') return;
 
         if (action === 'call') {
             window.electronAPI.openWhatsApp(button.dataset.phone);
@@ -325,26 +405,18 @@ document.addEventListener('DOMContentLoaded', () => {
             setupAndOpenUpdateCustomerModal(customer);
         } else if (action === 'delete-customer') {
             const customerName = button.dataset.customerName;
-            if (confirm(`Apakah anda yakin ingin menghapus ${customerName} dan semua data layanannya? Tindakan ini tidak ada dibatalkan.`)) {
+            if (confirm(`Apakah anda yakin ingin menghapus ${customerName} dan semua data layanannya? Tindakan ini tidak dapat dibatalkan.`)) {
                 handleDeleteCustomer(customerId);
             }
         }
     });
 
-    // (DIPERBARUI) Mengirim data handler saat menyimpan perubahan layanan
     document.getElementById('service-modal-save').addEventListener('click', async () => {
-        if (!selectedCustomer) return alert('Tidak ada pelanggan yang dipilih.');
-
-        const newDate = document.getElementById('service-modal-date').value;
-        const newHandler = document.getElementById('service-modal-handler').value;
-        if (!newDate) return alert('Silakan pilih tanggal layanan yang baru.');
-
         const result = await window.electronAPI.updateService({
             serviceID: selectedCustomer.serviceID,
-            newDate: newDate,
-            newHandler: newHandler
+            newDate: document.getElementById('service-modal-date').value,
+            newHandler: document.getElementById('service-modal-handler').value
         });
-
         if (result.success) {
             alert('Layanan berhasil diperbarui!');
             closeModal(updateServiceModal);
@@ -355,12 +427,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     document.getElementById('contact-modal-save').addEventListener('click', async () => {
-        const statusMap = {
-            'not_contacted': 'UPCOMING',
-            'contacted': 'CONTACTED',
-            'overdue': 'OVERDUE'
-        };
-
+        const statusMap = { 'not_contacted': 'UPCOMING', 'contacted': 'CONTACTED', 'overdue': 'OVERDUE' };
         const result = await window.electronAPI.updateContactStatus({
             serviceID: selectedCustomer.serviceID,
             newStatus: statusMap[document.getElementById('contact-modal-status').value],
@@ -375,7 +442,23 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // (DIPERBARUI) Mengirim data handler saat menambah pelanggan baru
+    document.getElementById('history-note-modal-save').addEventListener('click', async () => {
+        if (confirm('Apakah Anda yakin ingin menyimpan perubahan pada riwayat ini?')) {
+            const result = await window.electronAPI.updateHistoryNote({
+                serviceID: selectedServiceForNoteEdit.serviceId,
+                newNotes: document.getElementById('history-note-modal-notes').value,
+                newHandler: document.getElementById('history-note-modal-handler').value
+            });
+            if (result.success) {
+                alert('Catatan riwayat berhasil diperbarui!');
+                closeModal(updateHistoryNoteModal);
+                initializeApp();
+            } else {
+                alert(`Gagal memperbarui catatan: ${result.error}`);
+            }
+        }
+    });
+
     document.getElementById('add-modal-save').addEventListener('click', async () => {
         const customerData = {
             name: document.getElementById('add-modal-name').value,
@@ -384,8 +467,6 @@ document.addEventListener('DOMContentLoaded', () => {
             nextService: document.getElementById('add-modal-nextService').value,
             handler: document.getElementById('add-modal-handler').value,
         };
-        if (!customerData.name || !customerData.phone) return alert('Mohon isi nama dan nomor telepon pelanggan.');
-
         const result = await window.electronAPI.addCustomer(customerData);
         if (result.success) {
             alert('Pelanggan baru berhasil ditambahkan!');
@@ -402,13 +483,10 @@ document.addEventListener('DOMContentLoaded', () => {
             phone: document.getElementById('update-modal-phone').value,
             address: document.getElementById('update-modal-address').value,
         };
-        if (!updatedData.name || !updatedData.phone) return alert('Mohon isi nama dan nomor telepon pelanggan.');
-
         const result = await window.electronAPI.updateCustomer({
             customerID: selectedCustomer.customerID,
             updatedData: updatedData
         });
-
         if (result.success) {
             alert('Data pelanggan berhasil diupdate!');
             closeModal(updateCustomerModal);

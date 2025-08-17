@@ -15,8 +15,9 @@ if (process.platform === 'win32') {
   }
 }
 
-const SPREADSHEET_ID = '1x4AmlaQGgdqHLEHKo_jZlGvyq9XsHigz6r6qGHFll0o';
+const SPREADSHEET_ID = '1x4AmlaQGgdqHLEHKo_jZlGvyq9XsHigz6r6qGHFll0o'; // PASTIKAN ID INI BENAR
 
+// --- FUNGSI LOGIKA GOOGLE SHEETS ---
 async function getSheets() {
   const auth = new JWT({
     email: creds.client_email,
@@ -41,7 +42,6 @@ async function getDataFromSheets() {
   const customersMap = new Map();
   customerRows.forEach(row => {
     customersMap.set(row.get('CustomerID'), {
-      customerID: row.get('CustomerID'),
       name: row.get('Nama'),
       address: row.get('Alamat'),
       phone: row.get('No Telp'),
@@ -73,14 +73,21 @@ async function getDataFromSheets() {
       .filter(s => s.status !== 'COMPLETED')
       .sort((a, b) => new Date(a.serviceDate) - new Date(b.serviceDate));
 
-    const nextService = upcomingServices.length > 0 ? upcomingServices[0] : null;
+    let representativeService = upcomingServices.length > 0
+      ? upcomingServices[0]
+      : customerServices.sort((a, b) => new Date(b.serviceDate) - new Date(a.serviceDate))[0];
 
-    if (nextService) {
+    if (representativeService) {
       combinedData.push({
         ...customerInfo,
-        ...nextService,
-        serviceHistory: customerServices,
-        nextService: nextService.serviceDate,
+        ...representativeService,
+        services: customerServices.map(s => ({
+          serviceID: s.serviceID,
+          date: s.serviceDate,
+          notes: s.notes,
+          handler: s.handler
+        })),
+        nextService: upcomingServices.length > 0 ? representativeService.serviceDate : null,
       });
     }
   }
@@ -92,22 +99,14 @@ async function getDataFromSheets() {
 const createWindow = () => {
   const mainWindow = new BrowserWindow({
     width: 1200, height: 800,
-    webPreferences: {
-      preload: path.join(__dirname, 'preload.js'),
-      nodeIntegration: false,
-      contextIsolation: true,
-    },
+    webPreferences: { preload: path.join(__dirname, 'preload.js') },
   });
-
   if (MAIN_WINDOW_VITE_DEV_SERVER_URL) {
     mainWindow.loadURL(MAIN_WINDOW_VITE_DEV_SERVER_URL);
   } else {
     mainWindow.loadFile(path.join(__dirname, `../renderer/${MAIN_WINDOW_VITE_NAME}/index.html`));
   }
-
-  if (!app.isPackaged) {
-    mainWindow.webContents.openDevTools();
-  }
+  if (!app.isPackaged) mainWindow.webContents.openDevTools();
 };
 
 // --- HANDLER UNTUK PERMINTAAN DARI UI ---
@@ -116,7 +115,6 @@ ipcMain.handle('refresh-data', async () => {
     const data = await getDataFromSheets();
     return { success: true, data };
   } catch (error) {
-    console.error('Error refreshing data:', error);
     return { success: false, error: error.message };
   }
 });
@@ -143,6 +141,13 @@ ipcMain.handle('update-contact-status', async (event, { serviceID, newStatus, no
         Notes: 'Jadwal servis rutin berikutnya',
         Handler: rowToUpdate.get('Handler'),
       });
+    } else if (newStatus === 'OVERDUE') {
+      const nextAttemptDate = new Date();
+      nextAttemptDate.setDate(nextAttemptDate.getDate() + 7);
+      rowToUpdate.set('Status', 'OVERDUE');
+      rowToUpdate.set('ServiceDate', nextAttemptDate.toISOString().split('T')[0]);
+      rowToUpdate.set('Notes', notes);
+      await rowToUpdate.save();
     } else {
       rowToUpdate.set('Status', newStatus);
       rowToUpdate.set('Notes', notes);
@@ -155,29 +160,25 @@ ipcMain.handle('update-contact-status', async (event, { serviceID, newStatus, no
   }
 });
 
-// (DIPERBARUI) Handler ini sekarang mengupdate tanggal dan handler
-ipcMain.handle('update-service', async (event, { serviceID, newDate, newHandler }) => {
+// (DIPERBARUI) Handler untuk memperbarui catatan dan handler pada riwayat servis
+ipcMain.handle('update-history-note', async (event, { serviceID, newNotes, newHandler }) => {
   try {
     const { serviceSheet } = await getSheets();
     const rows = await serviceSheet.getRows();
     const rowToUpdate = rows.find(r => r.get('ServiceID') === serviceID);
-
     if (!rowToUpdate) {
-      throw new Error('Service record not found.');
+      throw new Error('Catatan riwayat servis tidak ditemukan.');
     }
-
-    rowToUpdate.set('ServiceDate', newDate);
-    rowToUpdate.set('Handler', newHandler);
+    rowToUpdate.set('Notes', newNotes);
+    rowToUpdate.set('Handler', newHandler); // <-- Baris baru untuk update handler
     await rowToUpdate.save();
-
     return { success: true };
   } catch (error) {
-    console.error('Error updating service:', error);
+    console.error('Gagal memperbarui catatan riwayat:', error);
     return { success: false, error: error.message };
   }
 });
 
-// (DIPERBARUI) Handler ini sekarang menyimpan handler baru
 ipcMain.handle('add-customer', async (event, customerData) => {
   try {
     const { customerSheet, serviceSheet } = await getSheets();
@@ -194,12 +195,11 @@ ipcMain.handle('add-customer', async (event, customerData) => {
         CustomerID: newCustomerId,
         ServiceDate: customerData.nextService,
         Status: 'UPCOMING',
-        Handler: customerData.handler, // Menyimpan handler
+        Handler: customerData.handler,
       });
     }
     return { success: true };
   } catch (error) {
-    console.error('Error adding customer:', error);
     return { success: false, error: error.message };
   }
 });
@@ -217,7 +217,6 @@ ipcMain.handle('update-customer', async (event, { customerID, updatedData }) => 
     await rowToUpdate.save();
     return { success: true };
   } catch (error) {
-    console.error('Error updating customer:', error);
     return { success: false, error: error.message };
   }
 });
@@ -229,11 +228,8 @@ ipcMain.handle('delete-customer', async (event, customerID) => {
     const serviceRows = await serviceSheet.getRows();
 
     const rowToDelete = customerRows.find(r => r.get('CustomerID') === customerID);
-    if (rowToDelete) {
-      await rowToDelete.delete();
-    } else {
-      console.warn(`Customer with ID ${customerID} not found for deletion.`);
-    }
+    if (rowToDelete) await rowToDelete.delete();
+    else throw new Error('Customer not found for deletion.');
 
     const servicesToDelete = serviceRows.filter(r => r.get('CustomerID') === customerID);
     for (const serviceRow of servicesToDelete) {
@@ -242,15 +238,8 @@ ipcMain.handle('delete-customer', async (event, customerID) => {
 
     return { success: true };
   } catch (error) {
-    console.error('Error deleting customer:', error);
     return { success: false, error: error.message };
   }
-});
-
-ipcMain.handle('open-whatsapp', (event, phone) => {
-  if (!phone) return;
-  const cleanPhone = phone.replace(/\D/g, '');
-  shell.openExternal(`https://wa.me/${cleanPhone}`);
 });
 
 // --- SIKLUS HIDUP APLIKASI ---
