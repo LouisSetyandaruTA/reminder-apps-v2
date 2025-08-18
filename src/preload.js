@@ -1,26 +1,14 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('electronAPI', {
-    // Fungsi untuk "menarik" data dari main process
     refreshData: () => ipcRenderer.invoke('refresh-data'),
-
-    // Fungsi untuk mengirim perintah update status
     updateContactStatus: (updateInfo) => ipcRenderer.invoke('update-contact-status', updateInfo),
-
-    // (DIPERBARUI) Fungsi untuk update layanan (tanggal dan handler)
     updateService: (serviceInfo) => ipcRenderer.invoke('update-service', serviceInfo),
-
-    // Fungsi untuk menambah pelanggan baru
     addCustomer: (customerData) => ipcRenderer.invoke('add-customer', customerData),
-
-    // Fungsi untuk membuka WhatsApp
     openWhatsApp: (phoneNumber) => ipcRenderer.invoke('open-whatsapp', phoneNumber),
-
-    // Fungsi untuk update data pelanggan
     updateCustomer: (customerInfo) => ipcRenderer.invoke('update-customer', customerInfo),
-
-    // Fungsi untuk menghapus pelanggan
     deleteCustomer: (customerID) => ipcRenderer.invoke('delete-customer', customerID),
+    updateHistoryNote: (data) => ipcRenderer.invoke('update-history-note', data),
 });
 
 console.log('✅ Preload script berhasil dimuat!');
