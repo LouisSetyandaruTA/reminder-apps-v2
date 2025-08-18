@@ -8,8 +8,11 @@ import creds from './credentials.json' with { type: 'json' };
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-if (require('electron-squirrel-startup')) {
-  app.quit();
+// Handle creating/removing shortcuts on Windows when installing/uninstalling.
+if (process.platform === 'win32') {
+  if (require('electron-squirrel-startup')) {
+    app.quit();
+  }
 }
 
 const SPREADSHEET_ID = '1x4AmlaQGgdqHLEHKo_jZlGvyq9XsHigz6r6qGHFll0o'; // PASTIKAN ID INI BENAR
@@ -31,7 +34,6 @@ async function getSheets() {
   return { doc, customerSheet, serviceSheet };
 }
 
-// (DIPERBAIKI) Fungsi ini sekarang lebih bersih dan efisien
 async function getDataFromSheets() {
   const { customerSheet, serviceSheet } = await getSheets();
   const customerRows = await customerSheet.getRows();
@@ -46,7 +48,6 @@ async function getDataFromSheets() {
     });
   });
 
-  // (PENTING) Logika untuk menemukan 'nextService' yang benar
   const serviceGroups = {};
   serviceRows.forEach(row => {
     const customerID = row.get('CustomerID');
@@ -68,22 +69,27 @@ async function getDataFromSheets() {
     const customerServices = serviceGroups[customerID];
     const customerInfo = customersMap.get(customerID) || {};
 
-    // Cari servis berikutnya yang belum selesai
     const upcomingServices = customerServices
       .filter(s => s.status !== 'COMPLETED')
       .sort((a, b) => new Date(a.serviceDate) - new Date(b.serviceDate));
 
-    const nextService = upcomingServices.length > 0 ? upcomingServices[0] : null;
+    let representativeService = upcomingServices.length > 0
+      ? upcomingServices[0]
+      : customerServices.sort((a, b) => new Date(b.serviceDate) - new Date(a.serviceDate))[0];
 
-    if (nextService) {
+    if (representativeService) {
       combinedData.push({
         ...customerInfo,
-        ...nextService, // Ambil detail dari servis berikutnya
-        services: customerServices.reduce((acc, s) => { // Kirim semua histori servis
-          acc[s.serviceID] = s.serviceDate;
-          return acc;
-        }, {}),
-        nextService: nextService.serviceDate, // Pastikan nextService diisi
+        ...representativeService,
+        // (DIPERBAIKI) Menambahkan 'status' ke dalam setiap objek riwayat servis
+        services: customerServices.map(s => ({
+          serviceID: s.serviceID,
+          date: s.serviceDate,
+          notes: s.notes,
+          handler: s.handler,
+          status: s.status // <-- BARIS INI DIPERBAIKI
+        })),
+        nextService: upcomingServices.length > 0 ? representativeService.serviceDate : null,
       });
     }
   }
@@ -115,7 +121,6 @@ ipcMain.handle('refresh-data', async () => {
   }
 });
 
-// (DIPERBAIKI) Logika update status disempurnakan
 ipcMain.handle('update-contact-status', async (event, { serviceID, newStatus, notes }) => {
   try {
     const { serviceSheet } = await getSheets();
@@ -157,6 +162,24 @@ ipcMain.handle('update-contact-status', async (event, { serviceID, newStatus, no
   }
 });
 
+ipcMain.handle('update-history-note', async (event, { serviceID, newNotes, newHandler }) => {
+  try {
+    const { serviceSheet } = await getSheets();
+    const rows = await serviceSheet.getRows();
+    const rowToUpdate = rows.find(r => r.get('ServiceID') === serviceID);
+    if (!rowToUpdate) {
+      throw new Error('Catatan riwayat servis tidak ditemukan.');
+    }
+    rowToUpdate.set('Notes', newNotes);
+    rowToUpdate.set('Handler', newHandler);
+    await rowToUpdate.save();
+    return { success: true };
+  } catch (error) {
+    console.error('Gagal memperbarui catatan riwayat:', error);
+    return { success: false, error: error.message };
+  }
+});
+
 ipcMain.handle('add-customer', async (event, customerData) => {
   try {
     const { customerSheet, serviceSheet } = await getSheets();
@@ -173,6 +196,7 @@ ipcMain.handle('add-customer', async (event, customerData) => {
         CustomerID: newCustomerId,
         ServiceDate: customerData.nextService,
         Status: 'UPCOMING',
+        Handler: customerData.handler,
       });
     }
     return { success: true };
@@ -205,11 +229,8 @@ ipcMain.handle('delete-customer', async (event, customerID) => {
     const serviceRows = await serviceSheet.getRows();
 
     const rowToDelete = customerRows.find(r => r.get('CustomerID') === customerID);
-    if (rowToDelete) {
-      await rowToDelete.delete();
-    } else {
-      throw new Error('Customer not found for deletion.');
-    }
+    if (rowToDelete) await rowToDelete.delete();
+    else throw new Error('Customer not found for deletion.');
 
     const servicesToDelete = serviceRows.filter(r => r.get('CustomerID') === customerID);
     for (const serviceRow of servicesToDelete) {
@@ -231,8 +252,6 @@ ipcMain.handle('open-whatsapp', (event, phone) => {
 // --- SIKLUS HIDUP APLIKASI ---
 app.whenReady().then(() => {
   createWindow();
-  checkAndSendReminders();
-  setInterval(checkAndSendReminders, 3600000); // Cek setiap jam
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });

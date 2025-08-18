@@ -5,7 +5,13 @@
   "description": "My Electron application description",
   "main": ".vite/build/main.js",
   "scripts": {
+    "ng": "ng",
     "start": "electron-forge start",
+    "build": "ng build",
+    "watch": "ng build --watch --configuration development",
+    "test": "ng test",
+    "electron": "electron .",
+    "electron-build": "ng build && electron .",
     "package": "electron-forge package",
     "make": "electron-forge make",
     "publish": "electron-forge publish",
@@ -32,6 +38,8 @@
   },
   "dependencies": {
     "electron-squirrel-startup": "^1.0.1",
+    "google-auth-library": "^10.2.1",
+    "google-spreadsheet": "^5.0.2",
     "lucide-react": "^0.539.0",
     "react": "^19.1.1",
     "react-dom": "^19.1.1"
