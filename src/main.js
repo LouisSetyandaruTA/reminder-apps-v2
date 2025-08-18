@@ -8,7 +8,6 @@ import creds from './credentials.json' with { type: 'json' };
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Handle creating/removing shortcuts on Windows when installing/uninstalling.
 // if (process.platform === 'win32') {
 //   if (require('electron-squirrel-startup')) {
 //     app.quit();
@@ -81,19 +80,68 @@ async function getDataFromSheets() {
       combinedData.push({
         ...customerInfo,
         ...representativeService,
-        // (DIPERBAIKI) Menambahkan 'status' ke dalam setiap objek riwayat servis
         services: customerServices.map(s => ({
           serviceID: s.serviceID,
           date: s.serviceDate,
           notes: s.notes,
           handler: s.handler,
-          status: s.status // <-- BARIS INI DIPERBAIKI
+          status: s.status
         })),
         nextService: upcomingServices.length > 0 ? representativeService.serviceDate : null,
       });
     }
   }
   return combinedData;
+}
+
+// (FUNGSI DIPERBAIKI) Logika notifikasi sekarang mencakup H-3 hingga Hari H
+async function checkUpcomingServices() {
+  if (!Notification.isSupported()) {
+    console.log('Sistem notifikasi tidak didukung pada OS ini.');
+    return;
+  }
+
+  try {
+    const data = await getDataFromSheets();
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    console.log('Memeriksa jadwal untuk notifikasi...');
+
+    data.forEach(customer => {
+      if (customer.nextService && customer.status === 'UPCOMING') {
+        const parts = customer.nextService.split('-');
+        if (parts.length === 3) {
+          const year = parseInt(parts[0], 10);
+          const month = parseInt(parts[1], 10) - 1;
+          const day = parseInt(parts[2], 10);
+          const nextServiceDate = new Date(year, month, day);
+          nextServiceDate.setHours(0, 0, 0, 0);
+
+          const timeDiff = nextServiceDate.getTime() - today.getTime();
+          const daysDiff = Math.round(timeDiff / (1000 * 3600 * 24));
+
+          console.log(`Pelanggan: ${customer.name}, Jadwal: ${customer.nextService}, Sisa Hari: ${daysDiff}`);
+
+          // (DIPERBAIKI) Kirim notifikasi jika jadwal berada dalam rentang 0 hingga 3 hari
+          if (daysDiff >= 0 && daysDiff <= 3) {
+            let bodyMessage = `Jadwal servis untuk ${customer.name} jatuh tempo dalam ${daysDiff} hari lagi (${nextServiceDate.toLocaleDateString('id-ID')}).`;
+            if (daysDiff === 0) {
+              bodyMessage = `Jadwal servis untuk ${customer.name} jatuh tempo HARI INI (${nextServiceDate.toLocaleDateString('id-ID')}).`;
+            }
+
+            console.log(`MENGIRIM NOTIFIKASI untuk ${customer.name}`);
+            new Notification({
+              title: 'Pengingat Jadwal Servis',
+              body: bodyMessage
+            }).show();
+          }
+        }
+      }
+    });
+  } catch (error) {
+    console.error('Gagal memeriksa jadwal untuk notifikasi:', error);
+  }
 }
 
 
@@ -188,7 +236,6 @@ ipcMain.handle('update-service', async (event, { serviceID, newDate, newHandler 
 
     if (!rowToUpdate) {
       throw new Error('Service record not found.');
-      throw new Error('Catatan riwayat servis tidak ditemukan.');
     }
 
     rowToUpdate.set('ServiceDate', newDate);
@@ -198,9 +245,8 @@ ipcMain.handle('update-service', async (event, { serviceID, newDate, newHandler 
     return { success: true };
   } catch (error) {
     console.error('Error updating service:', error);
-    console.error('Gagal memperbarui catatan riwayat:', error);
-    return { success: false, error: error.message };
-  }
+    return { success: false, error: error.message };
+  }
 });
 
 
@@ -276,6 +322,9 @@ ipcMain.handle('open-whatsapp', (event, phone) => {
 // --- SIKLUS HIDUP APLIKASI ---
 app.whenReady().then(() => {
   createWindow();
+  // Panggil fungsi pengecekan notifikasi saat aplikasi siap
+  checkUpcomingServices();
+
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
