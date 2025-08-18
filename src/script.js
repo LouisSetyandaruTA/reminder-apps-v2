@@ -24,24 +24,15 @@ document.addEventListener('DOMContentLoaded', () => {
     const updateHistoryNoteModal = document.getElementById('update-history-note-modal');
 
     // --- VALIDATION & HELPER FUNCTIONS ---
-    
-    /**
-     * Menampilkan pesan peringatan di bawah input field.
-     * @param {HTMLElement} inputElement - Elemen input yang akan diberi peringatan.
-     * @param {string} message - Pesan peringatan yang akan ditampilkan.
-     */
+
     const showWarning = (inputElement, message) => {
-        hideWarning(inputElement); // Hapus peringatan lama dulu
+        hideWarning(inputElement);
         const warningElement = document.createElement('p');
         warningElement.className = 'input-warning text-red-600 text-xs mt-1';
         warningElement.textContent = message;
         inputElement.insertAdjacentElement('afterend', warningElement);
     };
 
-    /**
-     * Menghilangkan pesan peringatan dari sebuah input field.
-     * @param {HTMLElement} inputElement - Elemen input yang peringatannya akan dihapus.
-     */
     const hideWarning = (inputElement) => {
         const parent = inputElement.parentElement;
         const oldWarning = parent.querySelector('.input-warning');
@@ -50,11 +41,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
 
-    /**
-     * Fungsi utama untuk memvalidasi form dan mengaktifkan/menonaktifkan tombol simpan.
-     * SEMUA KOLOM DIANGGAP WAJIB DIISI.
-     * @param {HTMLElement} modalElement - Elemen modal yang berisi form.
-     */
     const validateForm = (modalElement) => {
         const saveButton = modalElement.querySelector('button[type="submit"]');
         if (!saveButton) return;
@@ -63,14 +49,12 @@ document.addEventListener('DOMContentLoaded', () => {
         const inputs = modalElement.querySelectorAll('input[id], textarea[id], select[id]');
 
         inputs.forEach(input => {
-            hideWarning(input); // Selalu bersihkan peringatan lama setiap kali validasi berjalan
-            
-            // 1. Cek apakah ada kolom yang kosong
+            hideWarning(input);
+
             if (!input.value.trim()) {
                 isAllValid = false;
             }
 
-            // 2. Cek tipe data spesifik untuk nomor telepon
             if (input.id.includes('phone')) {
                 if (input.value.trim() && !/^\d+$/.test(input.value.trim())) {
                     isAllValid = false;
@@ -85,12 +69,23 @@ document.addEventListener('DOMContentLoaded', () => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    const getMostRecentService = (serviceHistory) => {
-        if (!serviceHistory || serviceHistory.length === 0) return null;
-        const sortedServices = [...serviceHistory]
-            .filter(s => new Date(s.date) < new Date() || s.status === 'COMPLETED')
-            .sort((a, b) => new Date(b.date) - new Date(a.date));
-        return sortedServices.length > 0 ? sortedServices[0].date : null;
+    /**
+     * (DIPERBAIKI) Fungsi ini sekarang mencari servis terakhir dari semua riwayat servis.
+     * @param {Array} allServices - Array berisi semua objek servis milik pelanggan.
+     */
+    const getMostRecentService = (allServices) => {
+        if (!allServices || allServices.length === 0) return null;
+
+        // Filter servis yang sudah selesai ATAU tanggalnya sudah lewat
+        const completedOrPastServices = [...allServices]
+            .filter(s => {
+                const serviceDate = new Date(s.date);
+                // Dianggap "servis terakhir" jika statusnya COMPLETED atau tanggalnya sudah berlalu
+                return s.status === 'COMPLETED' || (!isNaN(serviceDate.getTime()) && serviceDate < today);
+            })
+            .sort((a, b) => new Date(b.date) - new Date(a.date)); // Urutkan dari yang terbaru
+
+        return completedOrPastServices.length > 0 ? completedOrPastServices[0].date : null;
     };
 
     const calculatePriority = (customer) => {
@@ -192,6 +187,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const priority = calculatePriority(customer);
             const contactStatusDisplay = getContactStatusDisplay(customer);
             const serviceDays = getDaysUntilService(customer);
+            // (DIPERBAIKI) Mengirim seluruh riwayat servis ke fungsi getMostRecentService
             const mostRecentServiceDate = getMostRecentService(customer.services);
 
             const card = document.createElement('div');
@@ -227,7 +223,7 @@ document.addEventListener('DOMContentLoaded', () => {
                                 </summary>
                                 <div class="mt-2 text-xs bg-gray-50 p-2 rounded border overflow-x-auto">
                                     ${customer.services && customer.services.length > 0
-                                        ? `<table class="min-w-full divide-y divide-gray-200">
+                    ? `<table class="min-w-full divide-y divide-gray-200">
                                               <thead class="bg-gray-100">
                                                   <tr>
                                                       <th scope="col" class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">No</th>
@@ -239,8 +235,8 @@ document.addEventListener('DOMContentLoaded', () => {
                                               </thead>
                                               <tbody class="bg-white divide-y divide-gray-200">
                                                   ${customer.services
-                                                    .sort((a, b) => new Date(b.date) - new Date(a.date))
-                                                    .map((service, index) => `
+                        .sort((a, b) => new Date(b.date) - new Date(a.date))
+                        .map((service, index) => `
                                                       <tr>
                                                           <td class="px-3 py-2 whitespace-nowrap">${index + 1}</td>
                                                           <td class="px-3 py-2 whitespace-nowrap">${formatDate(service.date)}</td>
@@ -261,8 +257,8 @@ document.addEventListener('DOMContentLoaded', () => {
                                                   `).join('')}
                                               </tbody>
                                           </table>`
-                                        : 'Tidak ada riwayat servis.'
-                                    }
+                    : 'Tidak ada riwayat servis.'
+                }
                                 </div>
                             </details>
                         </div>
@@ -298,8 +294,7 @@ document.addEventListener('DOMContentLoaded', () => {
         validateForm(modal); // Validasi form saat modal dibuka
     }
     function closeModal(modal) {
-        if(modal) {
-            // Hapus semua peringatan saat modal ditutup
+        if (modal) {
             modal.querySelectorAll('.input-warning').forEach(el => el.remove());
             modal.classList.add('hidden');
         }
@@ -311,11 +306,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 closeModal(modal);
             }
         });
-        // Tambahkan event listener untuk validasi real-time
         modal.addEventListener('input', () => validateForm(modal));
     });
 
-    // Listener untuk tombol Escape
     document.addEventListener('keydown', (e) => {
         if (e.key === 'Escape') {
             const openModal = document.querySelector('#modals-container .fixed:not(.hidden)');
@@ -342,7 +335,7 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('contact-modal-notes').value = customer.notes || '';
         openModal(updateContactModal);
     }
-    
+
     function setupAndOpenHistoryNoteModal({ serviceId, serviceDate, currentNotes, currentHandler, customerName }) {
         selectedServiceForNoteEdit = { serviceId };
         document.getElementById('history-note-modal-info').textContent = `Mengubah catatan untuk ${customerName} pada tanggal ${formatDate(serviceDate)}`;
@@ -380,7 +373,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const action = button.dataset.action;
         const serviceId = button.dataset.serviceId;
         const customerId = button.dataset.customerId;
-        
+
         if (action === 'edit-note') {
             setupAndOpenHistoryNoteModal({
                 serviceId: button.dataset.serviceId,

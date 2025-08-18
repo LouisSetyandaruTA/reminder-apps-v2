@@ -81,11 +81,13 @@ async function getDataFromSheets() {
       combinedData.push({
         ...customerInfo,
         ...representativeService,
+        // (DIPERBAIKI) Menambahkan 'status' ke dalam setiap objek riwayat servis
         services: customerServices.map(s => ({
           serviceID: s.serviceID,
           date: s.serviceDate,
           notes: s.notes,
-          handler: s.handler
+          handler: s.handler,
+          status: s.status // <-- BARIS INI DIPERBAIKI
         })),
         nextService: upcomingServices.length > 0 ? representativeService.serviceDate : null,
       });
@@ -160,7 +162,6 @@ ipcMain.handle('update-contact-status', async (event, { serviceID, newStatus, no
   }
 });
 
-// (DIPERBARUI) Handler untuk memperbarui catatan dan handler pada riwayat servis
 ipcMain.handle('update-history-note', async (event, { serviceID, newNotes, newHandler }) => {
   try {
     const { serviceSheet } = await getSheets();
@@ -170,7 +171,7 @@ ipcMain.handle('update-history-note', async (event, { serviceID, newNotes, newHa
       throw new Error('Catatan riwayat servis tidak ditemukan.');
     }
     rowToUpdate.set('Notes', newNotes);
-    rowToUpdate.set('Handler', newHandler); // <-- Baris baru untuk update handler
+    rowToUpdate.set('Handler', newHandler);
     await rowToUpdate.save();
     return { success: true };
   } catch (error) {
@@ -240,6 +241,12 @@ ipcMain.handle('delete-customer', async (event, customerID) => {
   } catch (error) {
     return { success: false, error: error.message };
   }
+});
+
+ipcMain.handle('open-whatsapp', (event, phone) => {
+  if (!phone) return;
+  const cleanPhone = phone.replace(/\D/g, '');
+  shell.openExternal(`https://wa.me/${cleanPhone}`);
 });
 
 // --- SIKLUS HIDUP APLIKASI ---
