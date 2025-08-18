@@ -404,104 +404,155 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
+    // --- FUNGSI BARU UNTUK MENAMPILKAN/MENYEMBUNYIKAN LOADING ---
+    const showLoading = () => {
+        loadingIndicator.classList.remove('hidden');
+    };
+
+    const hideLoading = () => {
+        loadingIndicator.classList.add('hidden');
+    };
+
     document.getElementById('service-modal-save').addEventListener('click', async () => {
-        const result = await window.electronAPI.updateService({
-            serviceID: selectedCustomer.serviceID,
-            newDate: document.getElementById('service-modal-date').value,
-            newHandler: document.getElementById('service-modal-handler').value
-        });
-        if (result.success) {
-            alert('Layanan berhasil diperbarui!');
-            closeModal(updateServiceModal);
+        closeModal(updateServiceModal); // Tutup modal saat tombol ditekan
+        showLoading(); // Tampilkan loading screen
+        try {
+            const result = await window.electronAPI.updateService({
+                serviceID: selectedCustomer.serviceID,
+                newDate: document.getElementById('service-modal-date').value,
+                newHandler: document.getElementById('service-modal-handler').value
+            });
+            if (result.success) {
+                alert('Layanan berhasil diperbarui!');
+                initializeApp();
+            } else {
+                alert(`Gagal memperbarui layanan: ${result.error}`);
+                initializeApp();
+            }
+        } catch (err) {
+            alert(`Terjadi kesalahan: ${err.message}`);
             initializeApp();
-        } else {
-            alert(`Gagal memperbarui layanan: ${result.error}`);
         }
     });
 
     document.getElementById('contact-modal-save').addEventListener('click', async () => {
-        const statusMap = { 'not_contacted': 'UPCOMING', 'contacted': 'CONTACTED', 'overdue': 'OVERDUE' };
-        const result = await window.electronAPI.updateContactStatus({
-            serviceID: selectedCustomer.serviceID,
-            newStatus: statusMap[document.getElementById('contact-modal-status').value],
-            notes: document.getElementById('contact-modal-notes').value
-        });
-        if (result.success) {
-            alert('Status kontak berhasil diupdate!');
-            closeModal(updateContactModal);
+        closeModal(updateContactModal); // Tutup modal saat tombol ditekan
+        showLoading(); // Tampilkan loading screen
+        try {
+            const statusMap = { 'not_contacted': 'UPCOMING', 'contacted': 'CONTACTED', 'overdue': 'OVERDUE' };
+            const result = await window.electronAPI.updateContactStatus({
+                serviceID: selectedCustomer.serviceID,
+                newStatus: statusMap[document.getElementById('contact-modal-status').value],
+                notes: document.getElementById('contact-modal-notes').value
+            });
+            if (result.success) {
+                alert('Status kontak berhasil diupdate!');
+                initializeApp();
+            } else {
+                alert(`Status kontak gagal di update: ${result.error}`);
+                initializeApp();
+            }
+        } catch (err) {
+            alert(`Terjadi kesalahan: ${err.message}`);
             initializeApp();
-        } else {
-            alert(`Status kontak gagal di update: ${result.error}`);
         }
     });
 
     document.getElementById('history-note-modal-save').addEventListener('click', async () => {
         if (confirm('Apakah Anda yakin ingin menyimpan perubahan pada riwayat ini?')) {
-            const result = await window.electronAPI.updateHistoryNote({
-                serviceID: selectedServiceForNoteEdit.serviceId,
-                newNotes: document.getElementById('history-note-modal-notes').value,
-                newHandler: document.getElementById('history-note-modal-handler').value
-            });
-            if (result.success) {
-                alert('Catatan riwayat berhasil diperbarui!');
-                closeModal(updateHistoryNoteModal);
+            closeModal(updateHistoryNoteModal); // Tutup modal saat konfirmasi
+            showLoading(); // Tampilkan loading screen
+            try {
+                const result = await window.electronAPI.updateHistoryNote({
+                    serviceID: selectedServiceForNoteEdit.serviceId,
+                    newNotes: document.getElementById('history-note-modal-notes').value,
+                    newHandler: document.getElementById('history-note-modal-handler').value
+                });
+                if (result.success) {
+                    alert('Catatan riwayat berhasil diperbarui!');
+                    initializeApp();
+                } else {
+                    alert(`Gagal memperbarui catatan: ${result.error}`);
+                    initializeApp();
+                }
+            } catch (err) {
+                alert(`Terjadi kesalahan: ${err.message}`);
                 initializeApp();
-            } else {
-                alert(`Gagal memperbarui catatan: ${result.error}`);
             }
         }
     });
 
     document.getElementById('add-modal-save').addEventListener('click', async () => {
-        const customerData = {
-            name: document.getElementById('add-modal-name').value,
-            phone: document.getElementById('add-modal-phone').value,
-            address: document.getElementById('add-modal-address').value,
-            nextService: document.getElementById('add-modal-nextService').value,
-            handler: document.getElementById('add-modal-handler').value,
-        };
-        const result = await window.electronAPI.addCustomer(customerData);
-        if (result.success) {
-            alert('Pelanggan baru berhasil ditambahkan!');
-            closeModal(addCustomerModal);
+        closeModal(addCustomerModal); // Tutup modal
+        showLoading(); // Tampilkan loading screen
+        try {
+            const customerData = {
+                name: document.getElementById('add-modal-name').value,
+                phone: document.getElementById('add-modal-phone').value,
+                address: document.getElementById('add-modal-address').value,
+                nextService: document.getElementById('add-modal-nextService').value,
+                handler: document.getElementById('add-modal-handler').value,
+            };
+            const result = await window.electronAPI.addCustomer(customerData);
+            if (result.success) {
+                alert('Pelanggan baru berhasil ditambahkan!');
+                initializeApp();
+            } else {
+                alert(`Gagal menambah pelanggan: ${result.error}`);
+                initializeApp();
+            }
+        } catch (err) {
+            alert(`Terjadi kesalahan: ${err.message}`);
             initializeApp();
-        } else {
-            alert(`Gagal menambah pelanggan: ${result.error}`);
         }
     });
 
     document.getElementById('update-modal-save').addEventListener('click', async () => {
-        const updatedData = {
-            name: document.getElementById('update-modal-name').value,
-            phone: document.getElementById('update-modal-phone').value,
-            address: document.getElementById('update-modal-address').value,
-        };
-        const result = await window.electronAPI.updateCustomer({
-            customerID: selectedCustomer.customerID,
-            updatedData: updatedData
-        });
-        if (result.success) {
-            alert('Data pelanggan berhasil diupdate!');
-            closeModal(updateCustomerModal);
+        closeModal(updateCustomerModal); // Tutup modal
+        showLoading(); // Tampilkan loading screen
+        try {
+            const updatedData = {
+                name: document.getElementById('update-modal-name').value,
+                phone: document.getElementById('update-modal-phone').value,
+                address: document.getElementById('update-modal-address').value,
+            };
+            const result = await window.electronAPI.updateCustomer({
+                customerID: selectedCustomer.customerID,
+                updatedData: updatedData
+            });
+            if (result.success) {
+                alert('Data pelanggan berhasil diupdate!');
+                initializeApp();
+            } else {
+                alert(`Gagal mengupdate data pelanggan: ${result.error}`);
+                initializeApp();
+            }
+        } catch (err) {
+            alert(`Terjadi kesalahan: ${err.message}`);
             initializeApp();
-        } else {
-            alert(`Gagal mengupdate data pelanggan: ${result.error}`);
         }
     });
 
     async function handleDeleteCustomer(customerID) {
-        const result = await window.electronAPI.deleteCustomer(customerID);
-        if (result.success) {
-            alert('Pelanggan berhasil dihapus!');
+        showLoading(); // Tampilkan loading screen
+        try {
+            const result = await window.electronAPI.deleteCustomer(customerID);
+            if (result.success) {
+                alert('Pelanggan berhasil dihapus!');
+                initializeApp();
+            } else {
+                alert(`Gagal menghapus pelanggan: ${result.error}`);
+                initializeApp();
+            }
+        } catch (err) {
+            alert(`Terjadi kesalahan: ${err.message}`);
             initializeApp();
-        } else {
-            alert(`Gagal menghapus pelanggan: ${result.error}`);
         }
     }
 
     // --- INITIALIZATION ---
     async function initializeApp() {
-        loadingIndicator.classList.remove('hidden');
+        showLoading();
         errorIndicator.classList.add('hidden');
         customerListContainer.innerHTML = '';
         emptyState.classList.add('hidden');
@@ -518,7 +569,7 @@ document.addEventListener('DOMContentLoaded', () => {
             errorMessage.textContent = err.message;
             errorIndicator.classList.remove('hidden');
         } finally {
-            loadingIndicator.classList.add('hidden');
+            hideLoading();
             if (window.lucide) {
                 window.lucide.createIcons();
             }

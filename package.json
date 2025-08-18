@@ -1,8 +1,8 @@
 {
   "name": "reminder-apps-v2",
-  "productName": "reminder-apps-v2",
+  "productName": "Solahart Services Reminder",
   "version": "1.0.0",
-  "description": "My Electron application description",
+  "description": "Aplikasi pengingat jadwal servis pelanggan",
   "main": ".vite/build/main.js",
   "scripts": {
     "ng": "ng",

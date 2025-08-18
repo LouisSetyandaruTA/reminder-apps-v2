@@ -9,11 +9,11 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
-if (process.platform === 'win32') {
-  if (require('electron-squirrel-startup')) {
-    app.quit();
-  }
-}
+// if (process.platform === 'win32') {
+//   if (require('electron-squirrel-startup')) {
+//     app.quit();
+//   }
+// }
 
 const SPREADSHEET_ID = '1x4AmlaQGgdqHLEHKo_jZlGvyq9XsHigz6r6qGHFll0o'; // PASTIKAN ID INI BENAR
 
@@ -179,6 +179,30 @@ ipcMain.handle('update-history-note', async (event, { serviceID, newNotes, newHa
     return { success: false, error: error.message };
   }
 });
+
+ipcMain.handle('update-service', async (event, { serviceID, newDate, newHandler }) => {
+  try {
+    const { serviceSheet } = await getSheets();
+    const rows = await serviceSheet.getRows();
+    const rowToUpdate = rows.find(r => r.get('ServiceID') === serviceID);
+
+    if (!rowToUpdate) {
+      throw new Error('Service record not found.');
+      throw new Error('Catatan riwayat servis tidak ditemukan.');
+    }
+
+    rowToUpdate.set('ServiceDate', newDate);
+    rowToUpdate.set('Handler', newHandler);
+    await rowToUpdate.save();
+
+    return { success: true };
+  } catch (error) {
+    console.error('Error updating service:', error);
+    console.error('Gagal memperbarui catatan riwayat:', error);
+    return { success: false, error: error.message };
+  }
+});
+
 
 ipcMain.handle('add-customer', async (event, customerData) => {
   try {

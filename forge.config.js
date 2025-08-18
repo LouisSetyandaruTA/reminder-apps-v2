@@ -4,35 +4,49 @@ const { FuseV1Options, FuseVersion } = require('@electron/fuses');
 module.exports = {
   packagerConfig: {
     asar: true,
+    // Gunakan path tanpa ekstensi, Electron Forge akan menemukan yang benar secara otomatis
+    icon: 'assets/Logo_Solahart' 
   },
   rebuildConfig: {},
   makers: [
     {
       name: '@electron-forge/maker-squirrel',
-      config: {},
+      config: {
+        setupIcon: 'assets/Logo_Solahart.ico',
+        // Jika tidak memiliki URL publik, Anda bisa menghapus baris ini
+        // atau meninggalkannya kosong jika diperlukan oleh maker lain
+        iconUrl: 'URL_anda/assets/Logo%20Solahart.ico', 
+      },
     },
     {
       name: '@electron-forge/maker-zip',
       platforms: ['darwin'],
+      config: {
+        // Gunakan path ke file ikon .icns untuk macOS
+        icon: 'assets/Logo_Solahart.icns'
+      }
     },
     {
       name: '@electron-forge/maker-deb',
-      config: {},
+      config: {
+        // Gunakan path ke file ikon .png untuk Linux
+        icon: 'assets/Logo_Solahart.png'
+      },
     },
     {
       name: '@electron-forge/maker-rpm',
-      config: {},
+      config: {
+        // Gunakan path ke file ikon .png untuk Linux
+        icon: 'assets/Logo_Solahart.png'
+      },
     },
   ],
   plugins: [
     {
       name: '@electron-forge/plugin-vite',
       config: {
-        // `build` can specify multiple entry builds, which can be Main process, Preload scripts, Worker process, etc.
-        // If you are familiar with Vite configuration, it will look really familiar.
         build: [
           {
-            // `entry` is just an alias for `build.lib.entry` in the corresponding file of `config`.
             entry: 'src/main.js',
             config: 'vite.main.config.mjs',
             target: 'main',
@@ -51,8 +65,6 @@ module.exports = {
         ],
       },
     },
-    // Fuses are used to enable/disable various Electron functionality
-    // at package time, before code signing the application
     new FusesPlugin({
       version: FuseVersion.V1,
       [FuseV1Options.RunAsNode]: false,
