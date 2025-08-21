@@ -14,9 +14,8 @@ const __dirname = path.dirname(__filename);
 //   }
 // }
 
-const SPREADSHEET_ID = '1x4AmlaQGgdqHLEHKo_jZlGvyq9XsHigz6r6qGHFll0o'; // PASTIKAN ID INI BENAR
+const SPREADSHEET_ID = '1x4AmlaQGgdqHLEHKo_jZlGvyq9XsHigz6r6qGHFll0o';
 
-// --- FUNGSI LOGIKA GOOGLE SHEETS ---
 async function getSheets() {
   const auth = new JWT({
     email: creds.client_email,
@@ -94,7 +93,6 @@ async function getDataFromSheets() {
   return combinedData;
 }
 
-// (FUNGSI DIPERBAIKI) Logika notifikasi sekarang mencakup H-3 hingga Hari H
 async function checkUpcomingServices() {
   if (!Notification.isSupported()) {
     console.log('Sistem notifikasi tidak didukung pada OS ini.');
@@ -121,9 +119,6 @@ async function checkUpcomingServices() {
           const timeDiff = nextServiceDate.getTime() - today.getTime();
           const daysDiff = Math.round(timeDiff / (1000 * 3600 * 24));
 
-          console.log(`Pelanggan: ${customer.name}, Jadwal: ${customer.nextService}, Sisa Hari: ${daysDiff}`);
-
-          // (DIPERBAIKI) Kirim notifikasi jika jadwal berada dalam rentang 0 hingga 3 hari
           if (daysDiff >= 0 && daysDiff <= 3) {
             let bodyMessage = `Jadwal servis untuk ${customer.name} jatuh tempo dalam ${daysDiff} hari lagi (${nextServiceDate.toLocaleDateString('id-ID')}).`;
             if (daysDiff === 0) {
@@ -144,8 +139,6 @@ async function checkUpcomingServices() {
   }
 }
 
-
-// --- FUNGSI JENDELA ---
 const createWindow = () => {
   const mainWindow = new BrowserWindow({
     width: 1200, height: 800,
@@ -159,7 +152,6 @@ const createWindow = () => {
   if (!app.isPackaged) mainWindow.webContents.openDevTools();
 };
 
-// --- HANDLER UNTUK PERMINTAAN DARI UI ---
 ipcMain.handle('refresh-data', async () => {
   try {
     const data = await getDataFromSheets();
@@ -319,10 +311,8 @@ ipcMain.handle('open-whatsapp', (event, phone) => {
   shell.openExternal(`https://wa.me/${cleanPhone}`);
 });
 
-// --- SIKLUS HIDUP APLIKASI ---
 app.whenReady().then(() => {
   createWindow();
-  // Panggil fungsi pengecekan notifikasi saat aplikasi siap
   checkUpcomingServices();
 
   app.on('activate', () => {
