@@ -1,9 +1,12 @@
-import { app, BrowserWindow, ipcMain, Notification, shell } from 'electron';
+import { app, BrowserWindow, ipcMain, Notification, shell, dialog } from 'electron';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { GoogleSpreadsheet } from 'google-spreadsheet';
 import { JWT } from 'google-auth-library';
 import creds from './credentials.json' with { type: 'json' };
+import { PythonShell } from 'python-shell';
+import csv from 'csv-parser';
+import fs from 'fs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -91,6 +94,44 @@ async function getDataFromSheets() {
     }
   }
   return combinedData;
+}
+
+async function getFlatDataForExport() {
+  const { customerSheet, serviceSheet } = await getSheets();
+  const customerRows = await customerSheet.getRows();
+  const serviceRows = await serviceSheet.getRows();
+
+  // Buat map informasi pelanggan agar mudah dicari
+  const customersMap = new Map();
+  customerRows.forEach(row => {
+    customersMap.set(row.get('CustomerID'), {
+      customerID: row.get('CustomerID'),
+      name: row.get('Nama'),
+      address: row.get('Alamat'),
+      phone: row.get('No Telp'),
+    });
+  });
+
+  const flatData = [];
+  // Loop melalui setiap baris servis
+  serviceRows.forEach(row => {
+    const customerID = row.get('CustomerID');
+    const customerInfo = customersMap.get(customerID);
+
+    // Jika info pelanggan ada, gabungkan dengan info servis
+    if (customerInfo) {
+      flatData.push({
+        ...customerInfo, // { customerID, name, address, phone }
+        serviceID: row.get('ServiceID'),
+        serviceDate: row.get('ServiceDate'),
+        status: row.get('Status'),
+        notes: row.get('Notes'),
+        handler: row.get('Handler'),
+      });
+    }
+  });
+
+  return flatData;
 }
 
 async function checkUpcomingServices() {
@@ -284,23 +325,42 @@ ipcMain.handle('update-customer', async (event, { customerID, updatedData }) => 
   }
 });
 
+// Di dalam file: main.js
+
 ipcMain.handle('delete-customer', async (event, customerID) => {
   try {
     const { customerSheet, serviceSheet } = await getSheets();
+
+    // --- Proses Penghapusan Pelanggan ---
     const customerRows = await customerSheet.getRows();
+    let customerFoundAndDeleted = false;
+    for (const row of customerRows) {
+      if (row.get('CustomerID') === customerID) {
+        await row.delete();
+        customerFoundAndDeleted = true;
+        break; // Keluar dari loop setelah menemukan dan menghapus
+      }
+    }
+
+    // Memberi peringatan jika pelanggan tidak ditemukan, tapi tetap melanjutkan
+    // Ini untuk menangani kasus jika data pelanggan sudah dihapus manual
+    if (!customerFoundAndDeleted) {
+      console.warn(`Peringatan: Pelanggan dengan ID ${customerID} tidak ditemukan, tetapi tetap melanjutkan menghapus data servis terkait.`);
+    }
+
+    // --- Proses Penghapusan Servis ---
     const serviceRows = await serviceSheet.getRows();
-
-    const rowToDelete = customerRows.find(r => r.get('CustomerID') === customerID);
-    if (rowToDelete) await rowToDelete.delete();
-    else throw new Error('Customer not found for deletion.');
-
     const servicesToDelete = serviceRows.filter(r => r.get('CustomerID') === customerID);
-    for (const serviceRow of servicesToDelete) {
-      await serviceRow.delete();
+
+    // Menggunakan Promise.all untuk efisiensi, menghapus beberapa baris secara paralel
+    if (servicesToDelete.length > 0) {
+      await Promise.all(servicesToDelete.map(row => row.delete()));
     }
 
     return { success: true };
   } catch (error) {
+    // Memberi log error yang lebih jelas di terminal
+    console.error('Operasi penghapusan gagal:', error);
     return { success: false, error: error.message };
   }
 });
@@ -309,6 +369,139 @@ ipcMain.handle('open-whatsapp', (event, phone) => {
   if (!phone) return;
   const cleanPhone = phone.replace(/\D/g, '');
   shell.openExternal(`https://wa.me/${cleanPhone}`);
+});
+
+ipcMain.handle('export-data', async () => {
+  const saveDialogResult = await dialog.showSaveDialog({
+    title: 'Pilih Lokasi dan Nama File Ekspor',
+    // Default nama file tanpa ekstensi
+    defaultPath: `export-data-pelanggan-${new Date().toISOString().split('T')[0]}`,
+    filters: [
+      // Filter ini hanya untuk tampilan, kita akan mengabaikan ekstensinya di kode
+      { name: 'Excel Files', extensions: ['xlsx'] },
+      { name: 'CSV Files', extensions: ['csv'] },
+    ]
+  });
+
+  if (saveDialogResult.canceled || !saveDialogResult.filePath) {
+    return { success: false, error: 'Proses ekspor dibatalkan.' };
+  }
+
+  // ====================== PERUBAHAN DI SINI ======================
+  // Kita akan menghapus ekstensi dari path yang dipilih pengguna,
+  // agar Python bisa menambahkan .csv dan .xlsx sendiri.
+  const fullPath = saveDialogResult.filePath;
+  const parsedPath = path.parse(fullPath);
+  // Gabungkan kembali direktori dan nama dasar file (tanpa ekstensi)
+  const basePath = path.join(parsedPath.dir, parsedPath.name);
+  // =============================================================
+
+  try {
+    const dataFromSheets = await getFlatDataForExport();
+    const dataString = JSON.stringify(dataFromSheets);
+
+    const isPackaged = app.isPackaged;
+    const scriptResourcePath = isPackaged
+      ? path.join(process.resourcesPath, 'scripts')
+      : path.join(__dirname, '..', '..', 'scripts');
+
+    const options = {
+      mode: 'text',
+      pythonPath: 'python3',
+      scriptPath: scriptResourcePath,
+      // Kirim data JSON dan path dasar (tanpa ekstensi) sebagai argumen
+      args: [dataString, basePath]
+    };
+
+    const results = await PythonShell.run('export_data.py', options);
+    const message = results ? results[0] : '';
+
+    if (message.startsWith('SUCCESS')) {
+      // Beri tahu pengguna bahwa DUA file telah dibuat
+      return { success: true, path: `${basePath}.xlsx dan .csv` };
+    } else {
+      throw new Error(message.replace('ERROR: ', ''));
+    }
+  } catch (err) {
+    console.error('Gagal menjalankan proses ekspor:', err);
+    return { success: false, error: err.message || 'Terjadi kesalahan tidak diketahui saat ekspor.' };
+  }
+});
+
+ipcMain.handle('import-data', async () => {
+  try {
+    // 1. Minta pengguna memilih file
+    const openDialogResult = await dialog.showOpenDialog({
+      title: 'Pilih File untuk Diimpor',
+      properties: ['openFile'],
+      filters: [
+        { name: 'Spreadsheet Files', extensions: ['xlsx', 'csv'] }
+      ]
+    });
+
+    if (openDialogResult.canceled || !openDialogResult.filePaths[0]) {
+      return { success: false, error: 'Proses impor dibatalkan.' };
+    }
+
+    const inputFile = openDialogResult.filePaths[0];
+    const tempDir = app.getPath('userData'); // Direktori aman untuk file sementara
+
+    // 2. Jalankan skrip Python untuk memproses file
+    const pyOptions = {
+      mode: 'text',
+      pythonPath: 'python3',
+      scriptPath: path.join(__dirname, '..', '..', 'scripts'),
+      args: [inputFile, tempDir]
+    };
+
+    const pyResults = await PythonShell.run('import_data.py', pyOptions);
+    if (pyResults[0].startsWith('ERROR')) throw new Error(pyResults[0]);
+
+    // 3. Baca hasil CSV sementara
+    const customersPath = path.join(tempDir, 'customers_to_import.csv');
+    const servicesPath = path.join(tempDir, 'services_to_import.csv');
+
+    const customersToImport = [];
+    const servicesToImport = [];
+
+    await new Promise(resolve => fs.createReadStream(customersPath).pipe(csv()).on('data', (row) => customersToImport.push(row)).on('end', resolve));
+    await new Promise(resolve => fs.createReadStream(servicesPath).pipe(csv()).on('data', (row) => servicesToImport.push(row)).on('end', resolve));
+
+    // 4. Unggah data ke Google Sheets
+    const { customerSheet, serviceSheet } = await getSheets();
+
+    // Proses Pelanggan
+    const newCustomerRows = customersToImport.map(c => ({
+      CustomerID: `CUST-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+      Nama: c.name,
+      Alamat: c.address,
+      'No Telp': c.phone,
+    }));
+    await customerSheet.addRows(newCustomerRows);
+
+    // Proses Servis (perlu mencocokkan kembali dengan ID baru)
+    const allCustomers = await customerSheet.getRows();
+    const customerMap = new Map(allCustomers.map(r => [r.get('Nama'), r.get('CustomerID')]));
+
+    const newServiceRows = servicesToImport.map(s => ({
+      ServiceID: `SVC-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+      CustomerID: customerMap.get(s.name), // Cocokkan nama dengan CustomerID baru
+      ServiceDate: s.serviceDate,
+      Status: 'UPCOMING', // Status default saat impor
+      Notes: 'Data diimpor',
+    }));
+    await serviceSheet.addRows(newServiceRows);
+
+    // 5. Hapus file sementara
+    fs.unlinkSync(customersPath);
+    fs.unlinkSync(servicesPath);
+
+    return { success: true, message: `Berhasil mengimpor ${customersToImport.length} pelanggan dan ${servicesToImport.length} data servis.` };
+
+  } catch (error) {
+    console.error('Gagal melakukan impor:', error);
+    return { success: false, error: error.message };
+  }
 });
 
 app.whenReady().then(() => {

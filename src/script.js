@@ -351,6 +351,42 @@ document.addEventListener('DOMContentLoaded', () => {
     filterSelect.addEventListener('change', (e) => { filterBy = e.target.value; renderCustomers(); });
     sortSelect.addEventListener('change', (e) => { sortBy = e.target.value; renderCustomers(); });
 
+    document.getElementById('export-data-btn').addEventListener('click', async () => {
+        showLoading();
+        try {
+            const result = await window.electronAPI.exportData();
+            if (result.success) {
+                alert(`Data berhasil diekspor dan disimpan di:\n${result.path}`);
+            } else {
+                alert(`Gagal mengekspor data: ${result.error}`);
+            }
+        } catch (err) {
+            alert(`Terjadi kesalahan saat ekspor: ${err.message}`);
+        } finally {
+            hideLoading();
+        }
+    });
+
+    document.getElementById('import-data-btn').addEventListener('click', async () => {
+        if (!confirm('Apakah Anda yakin ingin mengimpor data dari file? Data yang ada tidak akan dihapus, tetapi data baru akan ditambahkan.')) {
+            return;
+        }
+        showLoading();
+        try {
+            const result = await window.electronAPI.importData();
+            if (result.success) {
+                alert(result.message);
+                initializeApp(); // Muat ulang data setelah impor berhasil
+            } else {
+                alert(`Gagal mengimpor data: ${result.error}`);
+            }
+        } catch (err) {
+            alert(`Terjadi kesalahan saat impor: ${err.message}`);
+        } finally {
+            hideLoading();
+        }
+    });
+
     document.getElementById('add-customer-btn').addEventListener('click', setupAndOpenAddCustomerModal);
     document.getElementById('refresh-btn').addEventListener('click', initializeApp);
     document.getElementById('retry-btn').addEventListener('click', initializeApp);
