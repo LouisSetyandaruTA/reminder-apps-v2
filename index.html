@@ -84,6 +84,12 @@
                         <input id="search-input" type="text" placeholder="Cari pelanggan..."
                             class="border-gray-300 rounded-lg px-3 py-2 pl-10 w-full focus:ring-blue-500 focus:border-blue-500">
                     </div>
+                    <div class="flex items-center">
+                        <i data-lucide="map-pin" class="text-gray-400 mr-2 h-5 w-5"></i>
+                        <select id="city-filter-select" class="border-gray-300 rounded-lg px-3 py-2">
+                            <option value="all">Semua Kota</option>
+                        </select>
+                    </div>
                     <div class="flex items-center gap-4">
                         <div class="flex items-center">
                             <i data-lucide="filter" class="text-gray-400 mr-2 h-5 w-5"></i>
@@ -254,8 +260,14 @@
                                 rows="2" placeholder="Masukkan alamat"></textarea>
                         </div>
                         <div>
+                            <label for="add-modal-kota" class="block text-sm font-medium text-gray-700">Kota</label>
+                            <input id="add-modal-kota" type="text"
+                                class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                                placeholder="Masukkan kota asal">
+                        </div>
+                        <div>
                             <label for="add-modal-nextService" class="block text-sm font-medium text-gray-700">Tanggal
-                                Layanan Berikutnya</label>
+                                Pemasangan</label>
                             <input id="add-modal-nextService" type="date"
                                 class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500">
                         </div>

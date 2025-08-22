@@ -5,11 +5,13 @@ document.addEventListener('DOMContentLoaded', () => {
     let sortBy = 'nextService';
     let filterBy = 'all';
     let searchTerm = '';
+    let filterByCity = 'all';
 
     const customerListContainer = document.getElementById('customer-list');
     const searchInput = document.getElementById('search-input');
     const filterSelect = document.getElementById('filter-select');
     const sortSelect = document.getElementById('sort-select');
+    const cityFilterSelect = document.getElementById('city-filter-select');
     const loadingIndicator = document.getElementById('loading-indicator');
     const errorIndicator = document.getElementById('error-indicator');
     const errorMessage = document.getElementById('error-message');
@@ -65,18 +67,18 @@ document.addEventListener('DOMContentLoaded', () => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    /**
-     * @param {Array} allServices
-     */
     const getMostRecentService = (allServices) => {
         if (!allServices || allServices.length === 0) return null;
 
         const completedOrPastServices = [...allServices]
             .filter(s => {
                 const serviceDate = new Date(s.date);
-                return s.status === 'COMPLETED' || (!isNaN(serviceDate.getTime()) && serviceDate < today);
+                const isInstallation = s.notes === 'Pemasangan Awal';
+                const isCompletedOrPast = s.status === 'COMPLETED' || (!isNaN(serviceDate.getTime()) && serviceDate < today);
+
+                return !isInstallation && isCompletedOrPast;
             })
-            .sort((a, b) => new Date(b.date) - new Date(a.date)); // Urutkan dari yang terbaru
+            .sort((a, b) => new Date(b.date) - new Date(a.date));
 
         return completedOrPastServices.length > 0 ? completedOrPastServices[0].date : null;
     };
@@ -136,6 +138,11 @@ document.addEventListener('DOMContentLoaded', () => {
         const sortedAndFilteredCustomers = customers
             .filter(customer => {
                 if (!customer || !customer.name) return false;
+
+                if (filterByCity !== 'all' && customer.kota !== filterByCity) {
+                    return false;
+                }
+
                 const lowerSearchTerm = searchTerm.toLowerCase();
                 const matchesSearch = (customer.name || '').toLowerCase().includes(lowerSearchTerm) ||
                     (customer.address || '').toLowerCase().includes(lowerSearchTerm) ||
@@ -181,6 +188,10 @@ document.addEventListener('DOMContentLoaded', () => {
             const serviceDays = getDaysUntilService(customer);
             const mostRecentServiceDate = getMostRecentService(customer.services);
 
+            // MODIFIED: Filter hanya servis dengan status COMPLETED
+            const completedServices = customer.services ?
+                customer.services.filter(service => service.status === 'COMPLETED') : [];
+
             const card = document.createElement('div');
             card.className = 'bg-white rounded-lg shadow-sm border border-gray-200 p-4 hover:shadow-md transition-shadow';
             card.innerHTML = `
@@ -197,6 +208,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         <div class="space-y-4 text-sm">
                             <div><p class="text-gray-500">Pengingat Berikutnya</p><p class="font-semibold text-gray-800">${formatDate(customer.nextService)} - <span class="text-blue-600">${serviceDays}</span></p></div>
                             <div><p class="text-gray-500">Alamat</p><p class="font-semibold text-gray-800">${customer.address || 'N/A'}</p></div>
+                            <div><p class="text-gray-500">Kota</p><p class="font-semibold text-gray-800">${customer.kota || 'N/A'}</p></div>
                             <div><p class="text-gray-500">Nomor Telepon</p><p class="font-semibold text-gray-800">${customer.phone || 'N/A'}</p></div>
                             <div class="grid grid-cols-3 gap-4 pt-1">
                                 <div><p class="text-gray-500">Servis Terakhir</p><p class="font-semibold text-gray-800">${formatDate(mostRecentServiceDate)}</p></div>
@@ -213,7 +225,7 @@ document.addEventListener('DOMContentLoaded', () => {
                                     <span class="hidden group-open:inline">Sembunyikan Riwayat Servis</span>
                                 </summary>
                                 <div class="mt-2 text-xs bg-gray-50 p-2 rounded border overflow-x-auto">
-                                    ${customer.services && customer.services.length > 0
+                                    ${completedServices.length > 0
                     ? `<table class="min-w-full divide-y divide-gray-200">
                                               <thead class="bg-gray-100">
                                                   <tr>
@@ -225,7 +237,7 @@ document.addEventListener('DOMContentLoaded', () => {
                                                   </tr>
                                               </thead>
                                               <tbody class="bg-white divide-y divide-gray-200">
-                                                  ${customer.services
+                                                  ${completedServices
                         .sort((a, b) => new Date(b.date) - new Date(a.date))
                         .map((service, index) => `
                                                       <tr>
@@ -248,7 +260,7 @@ document.addEventListener('DOMContentLoaded', () => {
                                                   `).join('')}
                                               </tbody>
                                           </table>`
-                    : 'Tidak ada riwayat servis.'
+                    : 'Tidak ada riwayat servis yang selesai.'
                 }
                                 </div>
                             </details>
@@ -268,11 +280,30 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         document.getElementById('stats-total').textContent = customers.length;
-        document.getElementById('stats-overdue').textContent = customers.filter(c => { const d = new Date(c.nextService); return !isNaN(d.getTime()) && d < today; }).length;
-        document.getElementById('stats-due-month').textContent = customers.filter(c => { const d = new Date(c.nextService); if (isNaN(d.getTime())) return false; const diff = Math.ceil((d - today) / (1000 * 60 * 60 * 24)); return diff >= 0 && diff <= 30; }).length;
-        document.getElementById('stats-contacted').textContent = customers.filter(c => c.status === 'COMPLETED').length;
-        document.getElementById('stats-not-contacted').textContent = customers.filter(c => c.status === 'UPCOMING').length;
-        document.getElementById('stats-contact-overdue').textContent = customers.filter(c => c.status === 'OVERDUE').length;
+        document.getElementById('stats-overdue').textContent = customers.filter(c => {
+            if (!c.nextService) return false;
+            const d = new Date(c.nextService);
+            return !isNaN(d.getTime()) && d < today;
+        }).length;
+        document.getElementById('stats-due-month').textContent = customers.filter(c => {
+            if (!c.nextService) return false;
+            const d = new Date(c.nextService);
+            if (isNaN(d.getTime())) return false;
+            const diff = Math.ceil((d - today) / (1000 * 60 * 60 * 24));
+            return diff >= 0 && diff <= 30;
+        }).length;
+        document.getElementById('stats-contacted').textContent = customers.filter(c => {
+            return (c.services && c.services.some(s => s.status === 'COMPLETED')) ||
+                c.status === 'COMPLETED' ||
+                c.status === 'CONTACTED';
+        }).length;
+        document.getElementById('stats-not-contacted').textContent = customers.filter(c =>
+            c.status === 'UPCOMING' &&
+            (!c.services || !c.services.some(s => s.status === 'COMPLETED'))
+        ).length;
+        document.getElementById('stats-contact-overdue').textContent = customers.filter(c =>
+            c.status === 'OVERDUE'
+        ).length;
 
         if (window.lucide) {
             window.lucide.createIcons();
@@ -287,6 +318,27 @@ document.addEventListener('DOMContentLoaded', () => {
         if (modal) {
             modal.querySelectorAll('.input-warning').forEach(el => el.remove());
             modal.classList.add('hidden');
+        }
+    }
+
+    function populateCityFilter(customers) {
+        const selectedValue = cityFilterSelect.value;
+        cityFilterSelect.innerHTML = '<option value="all">Semua Kota</option>';
+
+        if (!customers || customers.length === 0) return;
+
+        const cities = [...new Set(customers.map(c => c.kota).filter(Boolean))];
+        cities.sort();
+
+        cities.forEach(city => {
+            const option = document.createElement('option');
+            option.value = city;
+            option.textContent = city;
+            cityFilterSelect.appendChild(option);
+        });
+
+        if (cities.includes(selectedValue)) {
+            cityFilterSelect.value = selectedValue;
         }
     }
 
@@ -350,6 +402,7 @@ document.addEventListener('DOMContentLoaded', () => {
     searchInput.addEventListener('input', (e) => { searchTerm = e.target.value; renderCustomers(); });
     filterSelect.addEventListener('change', (e) => { filterBy = e.target.value; renderCustomers(); });
     sortSelect.addEventListener('change', (e) => { sortBy = e.target.value; renderCustomers(); });
+    cityFilterSelect.addEventListener('change', (e) => { filterByCity = e.target.value; renderCustomers(); });
 
     document.getElementById('export-data-btn').addEventListener('click', async () => {
         showLoading();
@@ -376,7 +429,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const result = await window.electronAPI.importData();
             if (result.success) {
                 alert(result.message);
-                initializeApp(); // Muat ulang data setelah impor berhasil
+                initializeApp();
             } else {
                 alert(`Gagal mengimpor data: ${result.error}`);
             }
@@ -514,6 +567,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 name: document.getElementById('add-modal-name').value,
                 phone: document.getElementById('add-modal-phone').value,
                 address: document.getElementById('add-modal-address').value,
+                kota: document.getElementById('add-modal-kota').value,
                 nextService: document.getElementById('add-modal-nextService').value,
                 handler: document.getElementById('add-modal-handler').value,
             };
@@ -584,6 +638,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const result = await window.electronAPI.refreshData();
             if (result.success) {
                 customers = result.data || [];
+                populateCityFilter(customers);
                 renderCustomers();
             } else {
                 throw new Error(result.error || 'Terjadi kesalahan tidak diketahui.');
