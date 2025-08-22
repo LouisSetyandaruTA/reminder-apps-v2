@@ -1,5 +1,4 @@
 document.addEventListener('DOMContentLoaded', () => {
-    // --- APPLICATION STATE ---
     let customers = [];
     let selectedCustomer = null;
     let selectedServiceForNoteEdit = {};
@@ -7,7 +6,6 @@ document.addEventListener('DOMContentLoaded', () => {
     let filterBy = 'all';
     let searchTerm = '';
 
-    // --- DOM ELEMENT REFERENCES ---
     const customerListContainer = document.getElementById('customer-list');
     const searchInput = document.getElementById('search-input');
     const filterSelect = document.getElementById('filter-select');
@@ -22,8 +20,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const addCustomerModal = document.getElementById('add-customer-modal');
     const updateCustomerModal = document.getElementById('update-customer-modal');
     const updateHistoryNoteModal = document.getElementById('update-history-note-modal');
-
-    // --- VALIDATION & HELPER FUNCTIONS ---
 
     const showWarning = (inputElement, message) => {
         hideWarning(inputElement);
@@ -70,17 +66,14 @@ document.addEventListener('DOMContentLoaded', () => {
     today.setHours(0, 0, 0, 0);
 
     /**
-     * (DIPERBAIKI) Fungsi ini sekarang mencari servis terakhir dari semua riwayat servis.
-     * @param {Array} allServices - Array berisi semua objek servis milik pelanggan.
+     * @param {Array} allServices
      */
     const getMostRecentService = (allServices) => {
         if (!allServices || allServices.length === 0) return null;
 
-        // Filter servis yang sudah selesai ATAU tanggalnya sudah lewat
         const completedOrPastServices = [...allServices]
             .filter(s => {
                 const serviceDate = new Date(s.date);
-                // Dianggap "servis terakhir" jika statusnya COMPLETED atau tanggalnya sudah berlalu
                 return s.status === 'COMPLETED' || (!isNaN(serviceDate.getTime()) && serviceDate < today);
             })
             .sort((a, b) => new Date(b.date) - new Date(a.date)); // Urutkan dari yang terbaru
@@ -139,7 +132,6 @@ document.addEventListener('DOMContentLoaded', () => {
         return date.toLocaleDateString('id-ID', { day: '2-digit', month: '2-digit', year: 'numeric' });
     };
 
-    // --- RENDER FUNCTION ---
     function renderCustomers() {
         const sortedAndFilteredCustomers = customers
             .filter(customer => {
@@ -187,7 +179,6 @@ document.addEventListener('DOMContentLoaded', () => {
             const priority = calculatePriority(customer);
             const contactStatusDisplay = getContactStatusDisplay(customer);
             const serviceDays = getDaysUntilService(customer);
-            // (DIPERBAIKI) Mengirim seluruh riwayat servis ke fungsi getMostRecentService
             const mostRecentServiceDate = getMostRecentService(customer.services);
 
             const card = document.createElement('div');
@@ -288,10 +279,9 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
 
-    // --- MODAL HANDLING ---
     function openModal(modal) {
         modal.classList.remove('hidden');
-        validateForm(modal); // Validasi form saat modal dibuka
+        validateForm(modal);
     }
     function closeModal(modal) {
         if (modal) {
@@ -357,10 +347,45 @@ document.addEventListener('DOMContentLoaded', () => {
         openModal(updateCustomerModal);
     }
 
-    // --- EVENT LISTENERS ---
     searchInput.addEventListener('input', (e) => { searchTerm = e.target.value; renderCustomers(); });
     filterSelect.addEventListener('change', (e) => { filterBy = e.target.value; renderCustomers(); });
     sortSelect.addEventListener('change', (e) => { sortBy = e.target.value; renderCustomers(); });
+
+    document.getElementById('export-data-btn').addEventListener('click', async () => {
+        showLoading();
+        try {
+            const result = await window.electronAPI.exportData();
+            if (result.success) {
+                alert(`Data berhasil diekspor dan disimpan di:\n${result.path}`);
+            } else {
+                alert(`Gagal mengekspor data: ${result.error}`);
+            }
+        } catch (err) {
+            alert(`Terjadi kesalahan saat ekspor: ${err.message}`);
+        } finally {
+            hideLoading();
+        }
+    });
+
+    document.getElementById('import-data-btn').addEventListener('click', async () => {
+        if (!confirm('Apakah Anda yakin ingin mengimpor data dari file? Data yang ada tidak akan dihapus, tetapi data baru akan ditambahkan.')) {
+            return;
+        }
+        showLoading();
+        try {
+            const result = await window.electronAPI.importData();
+            if (result.success) {
+                alert(result.message);
+                initializeApp(); // Muat ulang data setelah impor berhasil
+            } else {
+                alert(`Gagal mengimpor data: ${result.error}`);
+            }
+        } catch (err) {
+            alert(`Terjadi kesalahan saat impor: ${err.message}`);
+        } finally {
+            hideLoading();
+        }
+    });
 
     document.getElementById('add-customer-btn').addEventListener('click', setupAndOpenAddCustomerModal);
     document.getElementById('refresh-btn').addEventListener('click', initializeApp);
@@ -404,7 +429,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // --- FUNGSI BARU UNTUK MENAMPILKAN/MENYEMBUNYIKAN LOADING ---
     const showLoading = () => {
         loadingIndicator.classList.remove('hidden');
     };
@@ -414,8 +438,8 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     document.getElementById('service-modal-save').addEventListener('click', async () => {
-        closeModal(updateServiceModal); // Tutup modal saat tombol ditekan
-        showLoading(); // Tampilkan loading screen
+        closeModal(updateServiceModal);
+        showLoading();
         try {
             const result = await window.electronAPI.updateService({
                 serviceID: selectedCustomer.serviceID,
@@ -436,8 +460,8 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     document.getElementById('contact-modal-save').addEventListener('click', async () => {
-        closeModal(updateContactModal); // Tutup modal saat tombol ditekan
-        showLoading(); // Tampilkan loading screen
+        closeModal(updateContactModal);
+        showLoading();
         try {
             const statusMap = { 'not_contacted': 'UPCOMING', 'contacted': 'CONTACTED', 'overdue': 'OVERDUE' };
             const result = await window.electronAPI.updateContactStatus({
@@ -460,8 +484,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     document.getElementById('history-note-modal-save').addEventListener('click', async () => {
         if (confirm('Apakah Anda yakin ingin menyimpan perubahan pada riwayat ini?')) {
-            closeModal(updateHistoryNoteModal); // Tutup modal saat konfirmasi
-            showLoading(); // Tampilkan loading screen
+            closeModal(updateHistoryNoteModal);
+            showLoading();
             try {
                 const result = await window.electronAPI.updateHistoryNote({
                     serviceID: selectedServiceForNoteEdit.serviceId,
@@ -483,8 +507,8 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     document.getElementById('add-modal-save').addEventListener('click', async () => {
-        closeModal(addCustomerModal); // Tutup modal
-        showLoading(); // Tampilkan loading screen
+        closeModal(addCustomerModal);
+        showLoading();
         try {
             const customerData = {
                 name: document.getElementById('add-modal-name').value,
@@ -508,8 +532,8 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     document.getElementById('update-modal-save').addEventListener('click', async () => {
-        closeModal(updateCustomerModal); // Tutup modal
-        showLoading(); // Tampilkan loading screen
+        closeModal(updateCustomerModal);
+        showLoading();
         try {
             const updatedData = {
                 name: document.getElementById('update-modal-name').value,
@@ -534,7 +558,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     async function handleDeleteCustomer(customerID) {
-        showLoading(); // Tampilkan loading screen
+        showLoading();
         try {
             const result = await window.electronAPI.deleteCustomer(customerID);
             if (result.success) {
@@ -550,7 +574,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // --- INITIALIZATION ---
     async function initializeApp() {
         showLoading();
         errorIndicator.classList.add('hidden');
