@@ -168,10 +168,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 switch (filterBy) {
                     case 'all': return true;
                     case 'overdue': {
+                        if (!customer.nextService) return false;
                         const nextServiceDate = new Date(customer.nextService);
-                        return !isNaN(nextServiceDate.getTime()) && nextServiceDate < today;
+                        return !isNaN(nextServiceDate.getTime()) && nextServiceDate < today && customer.status !== 'COMPLETED';
                     }
                     case 'upcoming': {
+                        if (!customer.nextService) return false;
                         const nextServiceDate = new Date(customer.nextService);
                         if (isNaN(nextServiceDate.getTime())) return false;
                         const daysDiff = Math.ceil((nextServiceDate - today) / (1000 * 60 * 60 * 24));
@@ -247,7 +249,7 @@ document.addEventListener('DOMContentLoaded', () => {
                                               </thead>
                                               <tbody class="bg-white divide-y divide-gray-200">
                                                   ${completedServices
-                        .sort((a, b) => new Date(b.date) - new Date(a.date))
+                        .sort((a, b) => new Date(a.date) - new Date(b.date))
                         .map((service, index) => `
                                                       <tr>
                                                           <td class="px-3 py-2 whitespace-nowrap">${index + 1}</td>
@@ -289,21 +291,10 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         document.getElementById('stats-total').textContent = customers.length;
-
-        document.getElementById('stats-overdue').textContent = customers.filter(c => {
-            if (!c.nextService) return false;
-            const d = new Date(c.nextService);
-            return !isNaN(d.getTime()) && d < today && c.status !== 'COMPLETED';
-        }).length;
-
-        document.getElementById('stats-due-month').textContent = customers.filter(c => {
-            if (!c.nextService) return false;
-            const d = new Date(c.nextService);
-            if (isNaN(d.getTime())) return false;
-            const diff = Math.ceil((d - today) / (1000 * 60 * 60 * 24));
-            return diff >= 0 && diff <= 30;
-        }).length;
-        document.getElementById('stats-not-contacted').textContent = customers.filter(c => c.status === 'UPCOMING' && (!c.services || !c.services.some(s => s.status === 'COMPLETED'))).length;
+        document.getElementById('stats-overdue').textContent = customers.filter(c => { if (!c.nextService) return false; const d = new Date(c.nextService); return !isNaN(d.getTime()) && d < today && c.status !== 'COMPLETED'; }).length;
+        document.getElementById('stats-due-month').textContent = customers.filter(c => { if (!c.nextService) return false; const d = new Date(c.nextService); if (isNaN(d.getTime())) return false; const diff = Math.ceil((d - today) / (1000 * 60 * 60 * 24)); return diff >= 0 && diff <= 30; }).length;
+        document.getElementById('stats-contacted').textContent = customers.filter(c => c.status === 'COMPLETED').length;
+        document.getElementById('stats-not-contacted').textContent = customers.filter(c => c.status === 'UPCOMING').length;
         document.getElementById('stats-contact-overdue').textContent = customers.filter(c => c.status === 'OVERDUE').length;
 
         if (window.lucide) window.lucide.createIcons();
@@ -347,6 +338,7 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('update-modal-name').value = customer.name;
         document.getElementById('update-modal-phone').value = customer.phone;
         document.getElementById('update-modal-address').value = customer.address;
+        document.getElementById('update-modal-kota').value = customer.kota || '';
         openModal(updateCustomerModal);
     }
 
@@ -364,7 +356,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         } catch (err) {
             alert(`${errorMessagePrefix}: ${err.message}`);
-            initializeApp(); // Muat ulang bahkan jika gagal, untuk sinkronisasi
+            initializeApp();
         } finally {
             hideLoading();
         }
@@ -373,74 +365,39 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- Event Listeners Setup ---
 
     function setupEventListeners() {
-        // Filter and Search listeners
         searchInput.addEventListener('input', (e) => { searchTerm = e.target.value; renderCustomers(); });
         filterSelect.addEventListener('change', (e) => { filterBy = e.target.value; renderCustomers(); });
         cityFilterSelect.addEventListener('change', (e) => { filterByCity = e.target.value; renderCustomers(); });
 
-        // Main action buttons
         document.getElementById('add-customer-btn').addEventListener('click', setupAndOpenAddCustomerModal);
         document.getElementById('refresh-btn').addEventListener('click', initializeApp);
         document.getElementById('retry-btn').addEventListener('click', initializeApp);
 
-        document.getElementById('export-data-btn').addEventListener('click', async () => {
-            showLoading();
-            try {
-                const result = await window.electronAPI.exportData();
-                if (result.success) {
+        document.getElementById('export-data-btn').addEventListener('click', () => {
+            handleApiCall(window.electronAPI.exportData, null, 'Data berhasil diekspor!', 'Gagal mengekspor data').then(result => {
+                if (result && result.success) {
                     alert(`Data berhasil diekspor dan disimpan di:\n${result.path}`);
-                } else {
-                    alert(`Gagal mengekspor data: ${result.error}`);
                 }
-            } catch (err) {
-                alert(`Terjadi kesalahan saat ekspor: ${err.message}`);
-            } finally {
-                hideLoading();
+            });
+        });
+
+        document.getElementById('import-data-btn').addEventListener('click', () => {
+            if (confirm('Apakah Anda yakin ingin mengimpor data?')) {
+                handleApiCall(window.electronAPI.importData, null, 'Data berhasil diimpor!', 'Gagal mengimpor data');
             }
         });
 
-        document.getElementById('import-data-btn').addEventListener('click', async () => {
-            if (!confirm('Apakah Anda yakin ingin mengimpor data? Data baru akan ditambahkan.')) return;
-            showLoading();
-            try {
-                const result = await window.electronAPI.importData();
-                if (result.success) {
-                    alert(result.message);
-                    initializeApp();
-                } else {
-                    alert(`Gagal mengimpor data: ${result.error}`);
-                }
-            } catch (err) {
-                alert(`Terjadi kesalahan saat impor: ${err.message}`);
-            } finally {
-                hideLoading();
-            }
-        });
-
-        // Event delegation for customer cards
         customerListContainer.addEventListener('click', (e) => {
             const button = e.target.closest('button[data-action]');
             if (!button) return;
-
             const action = button.dataset.action;
             const customer = customers.find(c => c.serviceID === button.dataset.serviceId || c.customerID === button.dataset.customerId);
-
             switch (action) {
-                case 'edit-note':
-                    setupAndOpenHistoryNoteModal(button.dataset);
-                    break;
-                case 'call':
-                    window.electronAPI.openWhatsApp(button.dataset.phone);
-                    break;
-                case 'update-service':
-                    if (customer) setupAndOpenServiceModal(customer);
-                    break;
-                case 'update-contact':
-                    if (customer) setupAndOpenContactModal(customer);
-                    break;
-                case 'edit-customer':
-                    if (customer) setupAndOpenUpdateCustomerModal(customer);
-                    break;
+                case 'edit-note': setupAndOpenHistoryNoteModal(button.dataset); break;
+                case 'call': window.electronAPI.openWhatsApp(button.dataset.phone); break;
+                case 'update-service': if (customer) setupAndOpenServiceModal(customer); break;
+                case 'update-contact': if (customer) setupAndOpenContactModal(customer); break;
+                case 'edit-customer': if (customer) setupAndOpenUpdateCustomerModal(customer); break;
                 case 'delete-customer':
                     if (confirm(`Yakin ingin menghapus ${button.dataset.customerName}?`)) {
                         handleApiCall(window.electronAPI.deleteCustomer, button.dataset.customerId, 'Pelanggan berhasil dihapus!', 'Gagal menghapus pelanggan');
@@ -449,7 +406,6 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
 
-        // Modal save buttons
         document.getElementById('service-modal-save').addEventListener('click', () => {
             closeModal(updateServiceModal);
             const data = {
@@ -501,11 +457,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 name: document.getElementById('update-modal-name').value,
                 phone: document.getElementById('update-modal-phone').value,
                 address: document.getElementById('update-modal-address').value,
+                kota: document.getElementById('update-modal-kota').value
             };
             handleApiCall(window.electronAPI.updateCustomer, { customerID: selectedCustomer.customerID, updatedData }, 'Data pelanggan berhasil diupdate!', 'Gagal mengupdate data pelanggan');
         });
 
-        // Modal general listeners
         modals.forEach(modal => {
             modal.addEventListener('click', (e) => {
                 if (e.target.closest('[data-action="close"]')) closeModal(modal);
