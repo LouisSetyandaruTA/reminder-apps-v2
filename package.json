@@ -42,6 +42,7 @@
     "google-auth-library": "^10.2.1",
     "google-spreadsheet": "^5.0.2",
     "lucide-react": "^0.539.0",
+    "node-schedule": "^2.1.1",
     "python-shell": "^5.0.0",
     "react": "^19.1.1",
     "react-dom": "^19.1.1"
