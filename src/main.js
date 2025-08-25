@@ -323,41 +323,67 @@ ipcMain.handle('add-customer', async (event, customerData) => {
   }
 });
 
-ipcMain.handle('update-contact-status', async (event, { serviceID, newStatus, notes }) => {
+ipcMain.handle('update-contact-status', async (event, { serviceID, newStatus, notes, postponeDuration }) => {
   try {
     const { serviceSheet } = await getSheets();
     const rows = await serviceSheet.getRows();
-    const rowToUpdate = rows.find(r => r.get('ServiceID') === serviceID);
-    if (!rowToUpdate) throw new Error('Service record not found.');
+
+    // Logika yang lebih baik untuk menemukan baris yang akan diupdate
+    const triggeredRow = rows.find(r => r.get('ServiceID') === serviceID);
+    if (!triggeredRow) throw new Error('Service record pemicu tidak ditemukan.');
+    const customerId = triggeredRow.get('CustomerID');
+    const customerServices = rows.filter(r => r.get('CustomerID') === customerId);
+    const upcomingServices = customerServices
+      .filter(r => r.get('Status') === 'UPCOMING')
+      .sort((a, b) => new Date(a.get('ServiceDate')) - new Date(b.get('ServiceDate')));
+
+    let rowToUpdate = upcomingServices.length > 0 ? upcomingServices[0] : triggeredRow;
 
     if (newStatus === 'CONTACTED') {
-      const completionDate = new Date();
+      const completionDate = new Date().toISOString().split('T')[0];
       rowToUpdate.set('Status', 'COMPLETED');
       rowToUpdate.set('Notes', notes);
-      rowToUpdate.set('ServiceDate', completionDate.toISOString().split('T')[0]);
+      rowToUpdate.set('ServiceDate', completionDate);
       await rowToUpdate.save();
 
       const nextServiceDate = new Date();
       nextServiceDate.setMonth(nextServiceDate.getMonth() + 6);
-
-      const nextServiceId = await generateNewServiceId(nextServiceDate);
-
+      const idSuffix = customerId.substring(5);
+      const nextServiceId = `SVC-${idSuffix}-R`;
       await serviceSheet.addRow({
         ServiceID: nextServiceId,
-        CustomerID: rowToUpdate.get('CustomerID'),
+        CustomerID: customerId,
         ServiceDate: nextServiceDate.toISOString().split('T')[0],
         Status: 'UPCOMING',
         Notes: 'Jadwal servis rutin berikutnya',
         Handler: rowToUpdate.get('Handler'),
       });
+
     } else if (newStatus === 'OVERDUE') {
       const nextAttemptDate = new Date();
       nextAttemptDate.setDate(nextAttemptDate.getDate() + 7);
-
       rowToUpdate.set('Status', 'OVERDUE');
       rowToUpdate.set('ServiceDate', nextAttemptDate.toISOString().split('T')[0]);
       rowToUpdate.set('Notes', notes);
       await rowToUpdate.save();
+
+      // --- LOGIKA BARU UNTUK STATUS DITUNDA ---
+    } else if (newStatus === 'POSTPONED') {
+      const newDate = new Date();
+      switch (postponeDuration) {
+        case '1w': newDate.setDate(newDate.getDate() + 7); break;
+        case '1m': newDate.setMonth(newDate.getMonth() + 1); break;
+        case '3m': newDate.setMonth(newDate.getMonth() + 3); break;
+        case '6m': newDate.setMonth(newDate.getMonth() + 6); break;
+      }
+
+      // Status kembali menjadi UPCOMING dengan tanggal baru
+      rowToUpdate.set('Status', 'UPCOMING');
+      rowToUpdate.set('ServiceDate', newDate.toISOString().split('T')[0]);
+      rowToUpdate.set('Notes', notes);
+      await rowToUpdate.save();
+      // --- AKHIR LOGIKA BARU ---
+
     } else {
       rowToUpdate.set('Status', newStatus);
       rowToUpdate.set('Notes', notes);
