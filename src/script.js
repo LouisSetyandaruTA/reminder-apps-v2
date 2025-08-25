@@ -240,7 +240,7 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('detail-modal-edit').dataset.customerId = customer.customerID;
         document.getElementById('detail-modal-delete').dataset.customerId = customer.customerID;
         document.getElementById('detail-modal-delete').dataset.customerName = customer.name;
-        
+
         if (window.lucide) window.lucide.createIcons();
         openModal(customerDetailModal);
     }
@@ -365,6 +365,7 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('update-modal-phone').value = customer.phone;
         document.getElementById('update-modal-address').value = customer.address;
         document.getElementById('update-modal-kota').value = customer.kota || '';
+        document.getElementById('update-modal-customer-notes').value = customer.customerNotes || '';
         openModal(updateCustomerModal);
     }
 
@@ -375,14 +376,17 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             const result = await apiFunction(data);
             if (result.success) {
-                alert(successMessage);
+                if (successMessage) {
+                    alert(successMessage);
+                }
                 initializeApp();
             } else {
                 throw new Error(result.error || 'Terjadi kesalahan tidak diketahui.');
             }
         } catch (err) {
+            console.error('API Call Error:', err);
             alert(`${errorMessagePrefix}: ${err.message}`);
-            initializeApp();
+            // Tidak memanggil initializeApp() di sini karena mungkin data sedang dalam state tidak konsisten
         } finally {
             hideLoading();
         }
@@ -423,7 +427,13 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('contact-modal-save').addEventListener('click', () => {
             closeModal(updateContactModal);
 
-            const statusMap = { 'not_contacted': 'UPCOMING', 'contacted': 'CONTACTED', 'overdue': 'OVERDUE', 'postponed': 'POSTPONED', 'refused': 'REFUSED' };
+            const statusMap = {
+                'not_contacted': 'UPCOMING',
+                'contacted': 'CONTACTED',
+                'overdue': 'OVERDUE',
+                'postponed': 'POSTPONED',
+                'refused': 'REFUSED'
+            };
             const selectedStatus = contactModalStatus.value;
 
             const data = {
@@ -461,11 +471,15 @@ document.addEventListener('DOMContentLoaded', () => {
                 case 'update-contact': if (selectedCustomer) { closeModal(customerDetailModal); setupAndOpenContactModal(selectedCustomer); } break;
                 case 'update-service': if (selectedCustomer) { closeModal(customerDetailModal); setupAndOpenServiceModal(selectedCustomer); } break;
                 case 'edit-note': setupAndOpenHistoryNoteModal(button.dataset); break;
-                case 'edit-customer': if(selectedCustomer) { closeModal(customerDetailModal); setupAndOpenUpdateCustomerModal(selectedCustomer); } break;
-                case 'delete-customer': 
-                    if (confirm(`Yakin ingin menghapus ${selectedCustomer.name}?`)) {
-                        closeModal(customerDetailModal);
-                        handleApiCall(window.electronAPI.deleteCustomer, selectedCustomer.customerID, 'Pelanggan berhasil dihapus!', 'Gagal menghapus pelanggan');
+                case 'edit-customer': if (selectedCustomer) { closeModal(customerDetailModal); setupAndOpenUpdateCustomerModal(selectedCustomer); } break;
+                case 'delete-customer':
+                    if (confirm(`Yakin ingin menghapus ${button.dataset.customerName}?`)) {
+                        handleApiCall(
+                            window.electronAPI.deleteCustomer,
+                            button.dataset.customerId,
+                            'Pelanggan berhasil dihapus!',
+                            'Gagal menghapus pelanggan'
+                        );
                     }
                     break;
             }
@@ -507,6 +521,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 phone: document.getElementById('add-modal-phone').value,
                 address: document.getElementById('add-modal-address').value,
                 kota: document.getElementById('add-modal-kota').value,
+                customerNotes: document.getElementById('add-modal-customer-notes').value,
                 nextService: document.getElementById('add-modal-nextService').value,
                 handler: document.getElementById('add-modal-handler').value,
             };
@@ -519,7 +534,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 name: document.getElementById('update-modal-name').value,
                 phone: document.getElementById('update-modal-phone').value,
                 address: document.getElementById('update-modal-address').value,
-                kota: document.getElementById('update-modal-kota').value
+                kota: document.getElementById('update-modal-kota').value,
+                customerNotes: document.getElementById('update-modal-customer-notes').value, // Perbaiki ID ini
             };
             handleApiCall(window.electronAPI.updateCustomer, { customerID: selectedCustomer.customerID, updatedData }, 'Data pelanggan berhasil diupdate!', 'Gagal mengupdate data pelanggan');
         });

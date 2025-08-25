@@ -90,6 +90,7 @@ async function getDataFromSheets() {
       phone: row.get('No Telp'),
       kota: row.get('Kota'),
       pemasangan: row.get('Pemasangan'),
+      customerNotes: row.get('Notes Pelanggan'),
     });
   });
 
@@ -154,6 +155,7 @@ async function getFlatDataForExport() {
       phone: row.get('No Telp') || '',
       kota: row.get('Kota') || '',
       Pemasangan: row.get('Pemasangan') || '',
+      customerNotes: row.get('Notes Pelanggan') || '',
     });
   });
 
@@ -290,9 +292,9 @@ ipcMain.handle('add-customer', async (event, customerData) => {
       'No Telp': customerData.phone,
       Kota: customerData.kota,
       'Pemasangan': installationDateString,
+      'Notes Pelanggan': customerData.customerNotes || '', // Tambahkan default value
     });
 
-    // Generate Service IDs using date-based sequence
     const installationServiceId = await generateNewServiceId(installationDate);
     await serviceSheet.addRow({
       ServiceID: installationServiceId,
@@ -323,7 +325,7 @@ ipcMain.handle('add-customer', async (event, customerData) => {
   }
 });
 
-ipcMain.handle('update-contact-status', async (event, { serviceID, newStatus, notes, postponeDuration }) => {
+ipcMain.handle('update-contact-status', async (event, { serviceID, newStatus, notes, postponeDuration, refusalFollowUp }) => {
   try {
     const { serviceSheet } = await getSheets();
     const rows = await serviceSheet.getRows();
@@ -481,6 +483,8 @@ ipcMain.handle('update-customer', async (event, { customerID, updatedData }) => 
     if (updatedData.kota) {
       rowToUpdate.set('Kota', updatedData.kota);
     }
+    rowToUpdate.set('Notes Pelanggan', updatedData.customerNotes || ''); // Tambahkan default value
+
     await rowToUpdate.save();
     return { success: true };
   } catch (error) {
@@ -491,27 +495,53 @@ ipcMain.handle('update-customer', async (event, { customerID, updatedData }) => 
 ipcMain.handle('delete-customer', async (event, customerID) => {
   try {
     const { customerSheet, serviceSheet } = await getSheets();
-    const customerRows = await customerSheet.getRows();
-    let customerFoundAndDeleted = false;
-    for (const row of customerRows) {
-      if (row.get('CustomerID') === customerID) {
-        await row.delete();
-        customerFoundAndDeleted = true;
-        break;
+
+    // Fungsi helper untuk delete dengan retry
+    const deleteWithRetry = async (row, maxRetries = 3) => {
+      for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+          await row.delete();
+          return true;
+        } catch (error) {
+          if (attempt === maxRetries) throw error;
+          console.warn(`Attempt ${attempt} failed, retrying...`);
+          await new Promise(resolve => setTimeout(resolve, 1000 * attempt)); // Wait before retry
+        }
       }
-    }
-    if (!customerFoundAndDeleted) {
-      console.warn(`Peringatan: Pelanggan dengan ID ${customerID} tidak ditemukan, tetapi tetap melanjutkan menghapus data servis terkait.`);
-    }
+    };
+
+    // Hapus services terlebih dahulu
     const serviceRows = await serviceSheet.getRows();
     const servicesToDelete = serviceRows.filter(r => r.get('CustomerID') === customerID);
-    if (servicesToDelete.length > 0) {
-      await Promise.all(servicesToDelete.map(row => row.delete()));
+
+    console.log(`Menghapus ${servicesToDelete.length} service records untuk customer ${customerID}`);
+
+    for (const serviceRow of servicesToDelete) {
+      try {
+        await deleteWithRetry(serviceRow);
+      } catch (error) {
+        console.error(`Gagal menghapus service: ${serviceRow.get('ServiceID')}`, error);
+      }
     }
+
+    // Hapus customer
+    const customerRows = await customerSheet.getRows();
+    const customerToDelete = customerRows.find(r => r.get('CustomerID') === customerID);
+
+    if (customerToDelete) {
+      await deleteWithRetry(customerToDelete);
+      console.log(`Berhasil menghapus pelanggan: ${customerID}`);
+    } else {
+      console.warn(`Pelanggan ${customerID} tidak ditemukan di sheet customers`);
+    }
+
     return { success: true };
   } catch (error) {
     console.error('Operasi penghapusan gagal:', error);
-    return { success: false, error: error.message };
+    return {
+      success: false,
+      error: 'Gagal menghapus data. Silakan coba lagi atau refresh aplikasi.'
+    };
   }
 });
 
