@@ -13,9 +13,6 @@ module.exports = {
       name: '@electron-forge/maker-squirrel',
       config: {
         setupIcon: 'assets/Logo_Solahart.ico',
-        // Jika tidak memiliki URL publik, Anda bisa menghapus baris ini
-        // atau meninggalkannya kosong jika diperlukan oleh maker lain
-        iconUrl: 'URL_anda/assets/Logo%20Solahart.ico', 
       },
     },
     {
