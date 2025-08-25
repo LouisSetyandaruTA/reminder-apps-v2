@@ -1,15 +1,17 @@
 document.addEventListener('DOMContentLoaded', () => {
+    // --- State Management ---
     let customers = [];
     let selectedCustomer = null;
     let selectedServiceForNoteEdit = {};
-    let sortBy = 'nextService';
     let filterBy = 'all';
+    let filterByCity = 'all';
     let searchTerm = '';
 
+    // --- Element Caching ---
     const customerListContainer = document.getElementById('customer-list');
     const searchInput = document.getElementById('search-input');
     const filterSelect = document.getElementById('filter-select');
-    const sortSelect = document.getElementById('sort-select');
+    const cityFilterSelect = document.getElementById('city-filter-select');
     const loadingIndicator = document.getElementById('loading-indicator');
     const errorIndicator = document.getElementById('error-indicator');
     const errorMessage = document.getElementById('error-message');
@@ -20,6 +22,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const addCustomerModal = document.getElementById('add-customer-modal');
     const updateCustomerModal = document.getElementById('update-customer-modal');
     const updateHistoryNoteModal = document.getElementById('update-history-note-modal');
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    // --- UI Helper Functions ---
 
     const showWarning = (inputElement, message) => {
         hideWarning(inputElement);
@@ -32,52 +39,52 @@ document.addEventListener('DOMContentLoaded', () => {
     const hideWarning = (inputElement) => {
         const parent = inputElement.parentElement;
         const oldWarning = parent.querySelector('.input-warning');
-        if (oldWarning) {
-            oldWarning.remove();
-        }
+        if (oldWarning) oldWarning.remove();
     };
 
     const validateForm = (modalElement) => {
         const saveButton = modalElement.querySelector('button[type="submit"]');
         if (!saveButton) return;
-
         let isAllValid = true;
         const inputs = modalElement.querySelectorAll('input[id], textarea[id], select[id]');
-
         inputs.forEach(input => {
             hideWarning(input);
-
-            if (!input.value.trim()) {
+            if (!input.value.trim()) isAllValid = false;
+            if (input.id.includes('phone') && input.value.trim() && !/^\d+$/.test(input.value.trim())) {
                 isAllValid = false;
-            }
-
-            if (input.id.includes('phone')) {
-                if (input.value.trim() && !/^\d+$/.test(input.value.trim())) {
-                    isAllValid = false;
-                    showWarning(input, 'Nomor telepon hanya boleh berisi angka.');
-                }
+                showWarning(input, 'Nomor telepon hanya boleh berisi angka.');
             }
         });
-
         saveButton.disabled = !isAllValid;
     };
 
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    const openModal = (modal) => {
+        modal.classList.remove('hidden');
+        validateForm(modal);
+    };
 
-    /**
-     * @param {Array} allServices
-     */
+    const closeModal = (modal) => {
+        if (modal) {
+            modal.querySelectorAll('.input-warning').forEach(el => el.remove());
+            modal.classList.add('hidden');
+        }
+    };
+
+    const showLoading = () => loadingIndicator.classList.remove('hidden');
+    const hideLoading = () => loadingIndicator.classList.add('hidden');
+
+    // --- Data Formatting & Logic Functions ---
+
     const getMostRecentService = (allServices) => {
         if (!allServices || allServices.length === 0) return null;
-
         const completedOrPastServices = [...allServices]
             .filter(s => {
                 const serviceDate = new Date(s.date);
-                return s.status === 'COMPLETED' || (!isNaN(serviceDate.getTime()) && serviceDate < today);
+                const isInstallation = s.notes === 'Pemasangan Awal';
+                const isCompletedOrPast = s.status === 'COMPLETED' || (!isNaN(serviceDate.getTime()) && serviceDate < today);
+                return !isInstallation && isCompletedOrPast;
             })
-            .sort((a, b) => new Date(b.date) - new Date(a.date)); // Urutkan dari yang terbaru
-
+            .sort((a, b) => new Date(b.date) - new Date(a.date));
         return completedOrPastServices.length > 0 ? completedOrPastServices[0].date : null;
     };
 
@@ -132,10 +139,27 @@ document.addEventListener('DOMContentLoaded', () => {
         return date.toLocaleDateString('id-ID', { day: '2-digit', month: '2-digit', year: 'numeric' });
     };
 
+    function populateCityFilter(customers) {
+        const selectedValue = cityFilterSelect.value;
+        cityFilterSelect.innerHTML = '<option value="all">Semua Kota</option>';
+        if (!customers || customers.length === 0) return;
+        const cities = [...new Set(customers.map(c => c.kota).filter(Boolean))].sort();
+        cities.forEach(city => {
+            const option = document.createElement('option');
+            option.value = city;
+            option.textContent = city;
+            cityFilterSelect.appendChild(option);
+        });
+        cityFilterSelect.value = selectedValue;
+    }
+
+    // --- Core Rendering Function ---
+
     function renderCustomers() {
         const sortedAndFilteredCustomers = customers
             .filter(customer => {
                 if (!customer || !customer.name) return false;
+                if (filterByCity !== 'all' && customer.kota !== filterByCity) return false;
                 const lowerSearchTerm = searchTerm.toLowerCase();
                 const matchesSearch = (customer.name || '').toLowerCase().includes(lowerSearchTerm) ||
                     (customer.address || '').toLowerCase().includes(lowerSearchTerm) ||
@@ -144,10 +168,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 switch (filterBy) {
                     case 'all': return true;
                     case 'overdue': {
+                        if (!customer.nextService) return false;
                         const nextServiceDate = new Date(customer.nextService);
-                        return !isNaN(nextServiceDate.getTime()) && nextServiceDate < today;
+                        return !isNaN(nextServiceDate.getTime()) && nextServiceDate < today && customer.status !== 'COMPLETED';
                     }
                     case 'upcoming': {
+                        if (!customer.nextService) return false;
                         const nextServiceDate = new Date(customer.nextService);
                         if (isNaN(nextServiceDate.getTime())) return false;
                         const daysDiff = Math.ceil((nextServiceDate - today) / (1000 * 60 * 60 * 24));
@@ -160,16 +186,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             })
             .sort((a, b) => {
-                if (sortBy === 'nextService') {
-                    const dateA = a.nextService ? new Date(a.nextService) : null;
-                    const dateB = b.nextService ? new Date(b.nextService) : null;
-                    if (!dateA) return 1; if (!dateB) return -1;
-                    return dateA - dateB;
-                }
-                if (sortBy === 'name') {
-                    return (a.name || '').localeCompare(b.name || '');
-                }
-                return 0;
+                const dateA = a.nextService ? new Date(a.nextService) : null;
+                const dateB = b.nextService ? new Date(b.nextService) : null;
+                if (!dateA) return 1;
+                if (!dateB) return -1;
+                return dateA - dateB;
             });
 
         customerListContainer.innerHTML = '';
@@ -180,6 +201,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const contactStatusDisplay = getContactStatusDisplay(customer);
             const serviceDays = getDaysUntilService(customer);
             const mostRecentServiceDate = getMostRecentService(customer.services);
+            const completedServices = customer.services ? customer.services.filter(s => s.status === 'COMPLETED') : [];
 
             const card = document.createElement('div');
             card.className = 'bg-white rounded-lg shadow-sm border border-gray-200 p-4 hover:shadow-md transition-shadow';
@@ -197,6 +219,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         <div class="space-y-4 text-sm">
                             <div><p class="text-gray-500">Pengingat Berikutnya</p><p class="font-semibold text-gray-800">${formatDate(customer.nextService)} - <span class="text-blue-600">${serviceDays}</span></p></div>
                             <div><p class="text-gray-500">Alamat</p><p class="font-semibold text-gray-800">${customer.address || 'N/A'}</p></div>
+                            <div><p class="text-gray-500">Kota</p><p class="font-semibold text-gray-800">${customer.kota || 'N/A'}</p></div>
                             <div><p class="text-gray-500">Nomor Telepon</p><p class="font-semibold text-gray-800">${customer.phone || 'N/A'}</p></div>
                             <div class="grid grid-cols-3 gap-4 pt-1">
                                 <div><p class="text-gray-500">Servis Terakhir</p><p class="font-semibold text-gray-800">${formatDate(mostRecentServiceDate)}</p></div>
@@ -213,7 +236,7 @@ document.addEventListener('DOMContentLoaded', () => {
                                     <span class="hidden group-open:inline">Sembunyikan Riwayat Servis</span>
                                 </summary>
                                 <div class="mt-2 text-xs bg-gray-50 p-2 rounded border overflow-x-auto">
-                                    ${customer.services && customer.services.length > 0
+                                    ${completedServices.length > 0
                     ? `<table class="min-w-full divide-y divide-gray-200">
                                               <thead class="bg-gray-100">
                                                   <tr>
@@ -225,8 +248,8 @@ document.addEventListener('DOMContentLoaded', () => {
                                                   </tr>
                                               </thead>
                                               <tbody class="bg-white divide-y divide-gray-200">
-                                                  ${customer.services
-                        .sort((a, b) => new Date(b.date) - new Date(a.date))
+                                                  ${completedServices
+                        .sort((a, b) => new Date(a.date) - new Date(b.date))
                         .map((service, index) => `
                                                       <tr>
                                                           <td class="px-3 py-2 whitespace-nowrap">${index + 1}</td>
@@ -248,7 +271,7 @@ document.addEventListener('DOMContentLoaded', () => {
                                                   `).join('')}
                                               </tbody>
                                           </table>`
-                    : 'Tidak ada riwayat servis.'
+                    : 'Tidak ada riwayat servis yang selesai.'
                 }
                                 </div>
                             </details>
@@ -268,45 +291,16 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         document.getElementById('stats-total').textContent = customers.length;
-        document.getElementById('stats-overdue').textContent = customers.filter(c => { const d = new Date(c.nextService); return !isNaN(d.getTime()) && d < today; }).length;
-        document.getElementById('stats-due-month').textContent = customers.filter(c => { const d = new Date(c.nextService); if (isNaN(d.getTime())) return false; const diff = Math.ceil((d - today) / (1000 * 60 * 60 * 24)); return diff >= 0 && diff <= 30; }).length;
+        document.getElementById('stats-overdue').textContent = customers.filter(c => { if (!c.nextService) return false; const d = new Date(c.nextService); return !isNaN(d.getTime()) && d < today && c.status !== 'COMPLETED'; }).length;
+        document.getElementById('stats-due-month').textContent = customers.filter(c => { if (!c.nextService) return false; const d = new Date(c.nextService); if (isNaN(d.getTime())) return false; const diff = Math.ceil((d - today) / (1000 * 60 * 60 * 24)); return diff >= 0 && diff <= 30; }).length;
         document.getElementById('stats-contacted').textContent = customers.filter(c => c.status === 'COMPLETED').length;
         document.getElementById('stats-not-contacted').textContent = customers.filter(c => c.status === 'UPCOMING').length;
         document.getElementById('stats-contact-overdue').textContent = customers.filter(c => c.status === 'OVERDUE').length;
 
-        if (window.lucide) {
-            window.lucide.createIcons();
-        }
+        if (window.lucide) window.lucide.createIcons();
     };
 
-    function openModal(modal) {
-        modal.classList.remove('hidden');
-        validateForm(modal);
-    }
-    function closeModal(modal) {
-        if (modal) {
-            modal.querySelectorAll('.input-warning').forEach(el => el.remove());
-            modal.classList.add('hidden');
-        }
-    }
-
-    modals.forEach(modal => {
-        modal.addEventListener('click', (e) => {
-            if (e.target.closest('[data-action="close"]')) {
-                closeModal(modal);
-            }
-        });
-        modal.addEventListener('input', () => validateForm(modal));
-    });
-
-    document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape') {
-            const openModal = document.querySelector('#modals-container .fixed:not(.hidden)');
-            if (openModal) {
-                closeModal(openModal);
-            }
-        }
-    });
+    // --- Modal Setup Functions ---
 
     function setupAndOpenServiceModal(customer) {
         selectedCustomer = customer;
@@ -326,11 +320,11 @@ document.addEventListener('DOMContentLoaded', () => {
         openModal(updateContactModal);
     }
 
-    function setupAndOpenHistoryNoteModal({ serviceId, serviceDate, currentNotes, currentHandler, customerName }) {
-        selectedServiceForNoteEdit = { serviceId };
-        document.getElementById('history-note-modal-info').textContent = `Mengubah catatan untuk ${customerName} pada tanggal ${formatDate(serviceDate)}`;
-        document.getElementById('history-note-modal-notes').value = currentNotes;
-        document.getElementById('history-note-modal-handler').value = currentHandler;
+    function setupAndOpenHistoryNoteModal(data) {
+        selectedServiceForNoteEdit = { serviceId: data.serviceId };
+        document.getElementById('history-note-modal-info').textContent = `Mengubah catatan untuk ${data.customerName} pada tanggal ${formatDate(data.serviceDate)}`;
+        document.getElementById('history-note-modal-notes').value = data.currentNotes;
+        document.getElementById('history-note-modal-handler').value = data.currentHandler;
         openModal(updateHistoryNoteModal);
     }
 
@@ -344,235 +338,146 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('update-modal-name').value = customer.name;
         document.getElementById('update-modal-phone').value = customer.phone;
         document.getElementById('update-modal-address').value = customer.address;
+        document.getElementById('update-modal-kota').value = customer.kota || '';
         openModal(updateCustomerModal);
     }
 
-    searchInput.addEventListener('input', (e) => { searchTerm = e.target.value; renderCustomers(); });
-    filterSelect.addEventListener('change', (e) => { filterBy = e.target.value; renderCustomers(); });
-    sortSelect.addEventListener('change', (e) => { sortBy = e.target.value; renderCustomers(); });
+    // --- Generic API Call Handler ---
 
-    document.getElementById('export-data-btn').addEventListener('click', async () => {
+    async function handleApiCall(apiFunction, data, successMessage, errorMessagePrefix) {
         showLoading();
         try {
-            const result = await window.electronAPI.exportData();
+            const result = await apiFunction(data);
             if (result.success) {
-                alert(`Data berhasil diekspor dan disimpan di:\n${result.path}`);
+                alert(successMessage);
+                initializeApp();
             } else {
-                alert(`Gagal mengekspor data: ${result.error}`);
+                throw new Error(result.error || 'Terjadi kesalahan tidak diketahui.');
             }
         } catch (err) {
-            alert(`Terjadi kesalahan saat ekspor: ${err.message}`);
+            alert(`${errorMessagePrefix}: ${err.message}`);
+            initializeApp();
         } finally {
             hideLoading();
         }
-    });
+    }
 
-    document.getElementById('import-data-btn').addEventListener('click', async () => {
-        if (!confirm('Apakah Anda yakin ingin mengimpor data dari file? Data yang ada tidak akan dihapus, tetapi data baru akan ditambahkan.')) {
-            return;
-        }
-        showLoading();
-        try {
-            const result = await window.electronAPI.importData();
-            if (result.success) {
-                alert(result.message);
-                initializeApp(); // Muat ulang data setelah impor berhasil
-            } else {
-                alert(`Gagal mengimpor data: ${result.error}`);
-            }
-        } catch (err) {
-            alert(`Terjadi kesalahan saat impor: ${err.message}`);
-        } finally {
-            hideLoading();
-        }
-    });
+    // --- Event Listeners Setup ---
 
-    document.getElementById('add-customer-btn').addEventListener('click', setupAndOpenAddCustomerModal);
-    document.getElementById('refresh-btn').addEventListener('click', initializeApp);
-    document.getElementById('retry-btn').addEventListener('click', initializeApp);
+    function setupEventListeners() {
+        searchInput.addEventListener('input', (e) => { searchTerm = e.target.value; renderCustomers(); });
+        filterSelect.addEventListener('change', (e) => { filterBy = e.target.value; renderCustomers(); });
+        cityFilterSelect.addEventListener('change', (e) => { filterByCity = e.target.value; renderCustomers(); });
 
-    customerListContainer.addEventListener('click', (e) => {
-        const button = e.target.closest('button[data-action]');
-        if (!button) return;
+        document.getElementById('add-customer-btn').addEventListener('click', setupAndOpenAddCustomerModal);
+        document.getElementById('refresh-btn').addEventListener('click', initializeApp);
+        document.getElementById('retry-btn').addEventListener('click', initializeApp);
 
-        const action = button.dataset.action;
-        const serviceId = button.dataset.serviceId;
-        const customerId = button.dataset.customerId;
-
-        if (action === 'edit-note') {
-            setupAndOpenHistoryNoteModal({
-                serviceId: button.dataset.serviceId,
-                serviceDate: button.dataset.serviceDate,
-                currentNotes: button.dataset.currentNotes,
-                currentHandler: button.dataset.currentHandler,
-                customerName: button.dataset.customerName,
+        document.getElementById('export-data-btn').addEventListener('click', () => {
+            handleApiCall(window.electronAPI.exportData, null, 'Data berhasil diekspor!', 'Gagal mengekspor data').then(result => {
+                if (result && result.success) {
+                    alert(`Data berhasil diekspor dan disimpan di:\n${result.path}`);
+                }
             });
-            return;
-        }
+        });
 
-        const customer = customers.find(c => c.serviceID === serviceId || c.customerID === customerId);
-        if (!customer && action !== 'call') return;
-
-        if (action === 'call') {
-            window.electronAPI.openWhatsApp(button.dataset.phone);
-        } else if (action === 'update-service') {
-            setupAndOpenServiceModal(customer);
-        } else if (action === 'update-contact') {
-            setupAndOpenContactModal(customer);
-        } else if (action === 'edit-customer') {
-            setupAndOpenUpdateCustomerModal(customer);
-        } else if (action === 'delete-customer') {
-            const customerName = button.dataset.customerName;
-            if (confirm(`Apakah anda yakin ingin menghapus ${customerName} dan semua data layanannya? Tindakan ini tidak dapat dibatalkan.`)) {
-                handleDeleteCustomer(customerId);
+        document.getElementById('import-data-btn').addEventListener('click', () => {
+            if (confirm('Apakah Anda yakin ingin mengimpor data?')) {
+                handleApiCall(window.electronAPI.importData, null, 'Data berhasil diimpor!', 'Gagal mengimpor data');
             }
-        }
-    });
+        });
 
-    const showLoading = () => {
-        loadingIndicator.classList.remove('hidden');
-    };
+        customerListContainer.addEventListener('click', (e) => {
+            const button = e.target.closest('button[data-action]');
+            if (!button) return;
+            const action = button.dataset.action;
+            const customer = customers.find(c => c.serviceID === button.dataset.serviceId || c.customerID === button.dataset.customerId);
+            switch (action) {
+                case 'edit-note': setupAndOpenHistoryNoteModal(button.dataset); break;
+                case 'call': window.electronAPI.openWhatsApp(button.dataset.phone); break;
+                case 'update-service': if (customer) setupAndOpenServiceModal(customer); break;
+                case 'update-contact': if (customer) setupAndOpenContactModal(customer); break;
+                case 'edit-customer': if (customer) setupAndOpenUpdateCustomerModal(customer); break;
+                case 'delete-customer':
+                    if (confirm(`Yakin ingin menghapus ${button.dataset.customerName}?`)) {
+                        handleApiCall(window.electronAPI.deleteCustomer, button.dataset.customerId, 'Pelanggan berhasil dihapus!', 'Gagal menghapus pelanggan');
+                    }
+                    break;
+            }
+        });
 
-    const hideLoading = () => {
-        loadingIndicator.classList.add('hidden');
-    };
-
-    document.getElementById('service-modal-save').addEventListener('click', async () => {
-        closeModal(updateServiceModal);
-        showLoading();
-        try {
-            const result = await window.electronAPI.updateService({
+        document.getElementById('service-modal-save').addEventListener('click', () => {
+            closeModal(updateServiceModal);
+            const data = {
                 serviceID: selectedCustomer.serviceID,
                 newDate: document.getElementById('service-modal-date').value,
                 newHandler: document.getElementById('service-modal-handler').value
-            });
-            if (result.success) {
-                alert('Layanan berhasil diperbarui!');
-                initializeApp();
-            } else {
-                alert(`Gagal memperbarui layanan: ${result.error}`);
-                initializeApp();
-            }
-        } catch (err) {
-            alert(`Terjadi kesalahan: ${err.message}`);
-            initializeApp();
-        }
-    });
+            };
+            handleApiCall(window.electronAPI.updateService, data, 'Layanan berhasil diperbarui!', 'Gagal memperbarui layanan');
+        });
 
-    document.getElementById('contact-modal-save').addEventListener('click', async () => {
-        closeModal(updateContactModal);
-        showLoading();
-        try {
+        document.getElementById('contact-modal-save').addEventListener('click', () => {
+            closeModal(updateContactModal);
             const statusMap = { 'not_contacted': 'UPCOMING', 'contacted': 'CONTACTED', 'overdue': 'OVERDUE' };
-            const result = await window.electronAPI.updateContactStatus({
+            const data = {
                 serviceID: selectedCustomer.serviceID,
                 newStatus: statusMap[document.getElementById('contact-modal-status').value],
                 notes: document.getElementById('contact-modal-notes').value
-            });
-            if (result.success) {
-                alert('Status kontak berhasil diupdate!');
-                initializeApp();
-            } else {
-                alert(`Status kontak gagal di update: ${result.error}`);
-                initializeApp();
-            }
-        } catch (err) {
-            alert(`Terjadi kesalahan: ${err.message}`);
-            initializeApp();
-        }
-    });
+            };
+            handleApiCall(window.electronAPI.updateContactStatus, data, 'Status kontak berhasil diupdate!', 'Status kontak gagal di update');
+        });
 
-    document.getElementById('history-note-modal-save').addEventListener('click', async () => {
-        if (confirm('Apakah Anda yakin ingin menyimpan perubahan pada riwayat ini?')) {
+        document.getElementById('history-note-modal-save').addEventListener('click', () => {
+            if (!confirm('Yakin ingin menyimpan perubahan pada riwayat ini?')) return;
             closeModal(updateHistoryNoteModal);
-            showLoading();
-            try {
-                const result = await window.electronAPI.updateHistoryNote({
-                    serviceID: selectedServiceForNoteEdit.serviceId,
-                    newNotes: document.getElementById('history-note-modal-notes').value,
-                    newHandler: document.getElementById('history-note-modal-handler').value
-                });
-                if (result.success) {
-                    alert('Catatan riwayat berhasil diperbarui!');
-                    initializeApp();
-                } else {
-                    alert(`Gagal memperbarui catatan: ${result.error}`);
-                    initializeApp();
-                }
-            } catch (err) {
-                alert(`Terjadi kesalahan: ${err.message}`);
-                initializeApp();
-            }
-        }
-    });
+            const data = {
+                serviceID: selectedServiceForNoteEdit.serviceId,
+                newNotes: document.getElementById('history-note-modal-notes').value,
+                newHandler: document.getElementById('history-note-modal-handler').value
+            };
+            handleApiCall(window.electronAPI.updateHistoryNote, data, 'Catatan riwayat berhasil diperbarui!', 'Gagal memperbarui catatan');
+        });
 
-    document.getElementById('add-modal-save').addEventListener('click', async () => {
-        closeModal(addCustomerModal);
-        showLoading();
-        try {
+        document.getElementById('add-modal-save').addEventListener('click', () => {
+            closeModal(addCustomerModal);
             const customerData = {
                 name: document.getElementById('add-modal-name').value,
                 phone: document.getElementById('add-modal-phone').value,
                 address: document.getElementById('add-modal-address').value,
+                kota: document.getElementById('add-modal-kota').value,
                 nextService: document.getElementById('add-modal-nextService').value,
                 handler: document.getElementById('add-modal-handler').value,
             };
-            const result = await window.electronAPI.addCustomer(customerData);
-            if (result.success) {
-                alert('Pelanggan baru berhasil ditambahkan!');
-                initializeApp();
-            } else {
-                alert(`Gagal menambah pelanggan: ${result.error}`);
-                initializeApp();
-            }
-        } catch (err) {
-            alert(`Terjadi kesalahan: ${err.message}`);
-            initializeApp();
-        }
-    });
+            handleApiCall(window.electronAPI.addCustomer, customerData, 'Pelanggan baru berhasil ditambahkan!', 'Gagal menambah pelanggan');
+        });
 
-    document.getElementById('update-modal-save').addEventListener('click', async () => {
-        closeModal(updateCustomerModal);
-        showLoading();
-        try {
+        document.getElementById('update-modal-save').addEventListener('click', () => {
+            closeModal(updateCustomerModal);
             const updatedData = {
                 name: document.getElementById('update-modal-name').value,
                 phone: document.getElementById('update-modal-phone').value,
                 address: document.getElementById('update-modal-address').value,
+                kota: document.getElementById('update-modal-kota').value
             };
-            const result = await window.electronAPI.updateCustomer({
-                customerID: selectedCustomer.customerID,
-                updatedData: updatedData
-            });
-            if (result.success) {
-                alert('Data pelanggan berhasil diupdate!');
-                initializeApp();
-            } else {
-                alert(`Gagal mengupdate data pelanggan: ${result.error}`);
-                initializeApp();
-            }
-        } catch (err) {
-            alert(`Terjadi kesalahan: ${err.message}`);
-            initializeApp();
-        }
-    });
+            handleApiCall(window.electronAPI.updateCustomer, { customerID: selectedCustomer.customerID, updatedData }, 'Data pelanggan berhasil diupdate!', 'Gagal mengupdate data pelanggan');
+        });
 
-    async function handleDeleteCustomer(customerID) {
-        showLoading();
-        try {
-            const result = await window.electronAPI.deleteCustomer(customerID);
-            if (result.success) {
-                alert('Pelanggan berhasil dihapus!');
-                initializeApp();
-            } else {
-                alert(`Gagal menghapus pelanggan: ${result.error}`);
-                initializeApp();
+        modals.forEach(modal => {
+            modal.addEventListener('click', (e) => {
+                if (e.target.closest('[data-action="close"]')) closeModal(modal);
+            });
+            modal.addEventListener('input', () => validateForm(modal));
+        });
+
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                const openModal = document.querySelector('#modals-container .fixed:not(.hidden)');
+                if (openModal) closeModal(openModal);
             }
-        } catch (err) {
-            alert(`Terjadi kesalahan: ${err.message}`);
-            initializeApp();
-        }
+        });
     }
+
+    // --- App Initialization ---
 
     async function initializeApp() {
         showLoading();
@@ -584,6 +489,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const result = await window.electronAPI.refreshData();
             if (result.success) {
                 customers = result.data || [];
+                populateCityFilter(customers);
                 renderCustomers();
             } else {
                 throw new Error(result.error || 'Terjadi kesalahan tidak diketahui.');
@@ -599,5 +505,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    setupEventListeners();
     initializeApp();
 });
