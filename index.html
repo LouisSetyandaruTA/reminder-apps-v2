@@ -198,6 +198,19 @@
                                 <option value="not_contacted">Belum Dihubungi</option>
                                 <option value="contacted">Sudah Dihubungi</option>
                                 <option value="overdue">Terlambat (Tidak Ada Respon)</option>
+                                <option value="postponed">Ditunda</option>
+                                <option value="refused">Tidak Mau Servis Lagi</option>
+                            </select>
+                        </div>
+                        <div id="postpone-duration-container" class="hidden">
+                            <label for="contact-modal-postpone-duration"
+                                class="block text-sm font-medium text-gray-700">Tunda Selama</label>
+                            <select id="contact-modal-postpone-duration"
+                                class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                                <option value="1w">1 Minggu</option>
+                                <option value="1m">1 Bulan</option>
+                                <option value="3m">3 Bulan</option>
+                                <option value="6m">6 Bulan</option>
                             </select>
                         </div>
                         <div>

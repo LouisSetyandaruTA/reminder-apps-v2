@@ -22,6 +22,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const addCustomerModal = document.getElementById('add-customer-modal');
     const updateCustomerModal = document.getElementById('update-customer-modal');
     const updateHistoryNoteModal = document.getElementById('update-history-note-modal');
+    const contactModalStatus = document.getElementById('contact-modal-status');
+    const postponeDurationContainer = document.getElementById('postpone-duration-container');
 
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -404,6 +406,35 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                     break;
             }
+        });
+
+        contactModalStatus.addEventListener('change', (e) => {
+            if (e.target.value === 'postponed') {
+                postponeDurationContainer.classList.remove('hidden');
+            } else {
+                postponeDurationContainer.classList.add('hidden');
+            }
+        });
+
+        // Event listener untuk tombol simpan di modal kontak
+        document.getElementById('contact-modal-save').addEventListener('click', () => {
+            closeModal(updateContactModal);
+
+            const statusMap = { 'not_contacted': 'UPCOMING', 'contacted': 'CONTACTED', 'overdue': 'OVERDUE', 'postponed': 'POSTPONED' };
+            const selectedStatus = contactModalStatus.value;
+
+            const data = {
+                serviceID: selectedCustomer.serviceID,
+                newStatus: statusMap[selectedStatus],
+                notes: document.getElementById('contact-modal-notes').value
+            };
+
+            // Jika statusnya 'Ditunda', tambahkan durasi penundaan ke data
+            if (selectedStatus === 'postponed') {
+                data.postponeDuration = document.getElementById('contact-modal-postpone-duration').value;
+            }
+
+            handleApiCall(window.electronAPI.updateContactStatus, data, 'Status kontak berhasil diupdate!', 'Status kontak gagal di update');
         });
 
         document.getElementById('service-modal-save').addEventListener('click', () => {
