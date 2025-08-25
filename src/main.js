@@ -367,7 +367,6 @@ ipcMain.handle('update-contact-status', async (event, { serviceID, newStatus, no
       rowToUpdate.set('Notes', notes);
       await rowToUpdate.save();
 
-      // --- LOGIKA BARU UNTUK STATUS DITUNDA ---
     } else if (newStatus === 'POSTPONED') {
       const newDate = new Date();
       switch (postponeDuration) {
@@ -382,7 +381,35 @@ ipcMain.handle('update-contact-status', async (event, { serviceID, newStatus, no
       rowToUpdate.set('ServiceDate', newDate.toISOString().split('T')[0]);
       rowToUpdate.set('Notes', notes);
       await rowToUpdate.save();
-      // --- AKHIR LOGIKA BARU ---
+
+    } else if (newStatus === 'REFUSED') {
+      if (upcomingServices.length === 0) {
+        // Jika tidak ada jadwal mendatang, cukup catat penolakan di servis terakhir
+        triggeredRow.set('Notes', notes);
+        await triggeredRow.save();
+        return { success: true };
+      }
+
+      const rowToModify = upcomingServices[0]; // Selalu modifikasi jadwal mendatang
+
+      if (refusalFollowUp === 'never') {
+        // Hapus jadwal servis mendatang
+        await rowToModify.delete();
+      } else {
+        // Perbarui tanggal servis mendatang
+        const newDate = new Date();
+        if (refusalFollowUp === '1y') {
+          newDate.setFullYear(newDate.getFullYear() + 1);
+        } else if (refusalFollowUp === '2y') {
+          newDate.setFullYear(newDate.getFullYear() + 2);
+        }
+
+        rowToModify.set('ServiceDate', newDate.toISOString().split('T')[0]);
+        rowToModify.set('Notes', notes);
+        // Status tetap UPCOMING untuk pengingat di masa depan
+        rowToModify.set('Status', 'UPCOMING');
+        await rowToModify.save();
+      }
 
     } else {
       rowToUpdate.set('Status', newStatus);

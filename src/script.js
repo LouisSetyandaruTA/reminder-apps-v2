@@ -25,6 +25,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const contactModalStatus = document.getElementById('contact-modal-status');
     const postponeDurationContainer = document.getElementById('postpone-duration-container');
     const customerDetailModal = document.getElementById('customer-detail-modal');
+    const refusalFollowUpContainer = document.getElementById('refusal-follow-up-container');
 
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -155,7 +156,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         cityFilterSelect.value = selectedValue;
     }
-    
+
     // --- New Function to Show Customer Details in Modal ---
     function showCustomerDetails(customer) {
         selectedCustomer = customer;
@@ -208,10 +209,10 @@ document.addEventListener('DOMContentLoaded', () => {
         } else {
             historyTableBody.innerHTML = '<tr><td colspan="5" class="text-center py-4 text-gray-500">Tidak ada riwayat servis yang selesai.</td></tr>';
         }
-        
+
         const historyContainer = document.getElementById('detail-modal-history');
         historyContainer.innerHTML = ''; // Clear previous content
-        
+
         if (completedServices.length > 0) {
             const historyTable = document.createElement('table');
             historyTable.className = 'min-w-full divide-y divide-gray-200';
@@ -231,7 +232,7 @@ document.addEventListener('DOMContentLoaded', () => {
         } else {
             historyContainer.innerHTML = 'Tidak ada riwayat servis yang selesai.';
         }
-        
+
         // Update data-attributes for modal buttons
         document.getElementById('detail-modal-call').dataset.phone = customer.phone;
         document.getElementById('detail-modal-update-contact').dataset.serviceId = customer.serviceID;
@@ -243,7 +244,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (window.lucide) window.lucide.createIcons();
         openModal(customerDetailModal);
     }
-    
+
     // --- Core Rendering Function ---
     function renderCustomers() {
         const sortedAndFilteredCustomers = customers
@@ -335,8 +336,13 @@ document.addEventListener('DOMContentLoaded', () => {
         selectedCustomer = customer;
         document.getElementById('contact-modal-name').textContent = customer.name;
         document.getElementById('contact-modal-phone').textContent = customer.phone;
+
         document.getElementById('contact-modal-status').value = customer.status === 'COMPLETED' ? 'contacted' : (customer.status === 'OVERDUE' ? 'overdue' : 'not_contacted');
         document.getElementById('contact-modal-notes').value = customer.notes || '';
+
+        postponeDurationContainer.classList.add('hidden');
+        refusalFollowUpContainer.classList.add('hidden');
+
         openModal(updateContactModal);
     }
 
@@ -408,7 +414,33 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
 
-        // Event listener for the customer list container
+        contactModalStatus.addEventListener('change', (e) => {
+            const selectedValue = e.target.value;
+            postponeDurationContainer.classList.toggle('hidden', selectedValue !== 'postponed');
+            refusalFollowUpContainer.classList.toggle('hidden', selectedValue !== 'refused');
+        });
+
+        document.getElementById('contact-modal-save').addEventListener('click', () => {
+            closeModal(updateContactModal);
+
+            const statusMap = { 'not_contacted': 'UPCOMING', 'contacted': 'CONTACTED', 'overdue': 'OVERDUE', 'postponed': 'POSTPONED', 'refused': 'REFUSED' };
+            const selectedStatus = contactModalStatus.value;
+
+            const data = {
+                serviceID: selectedCustomer.serviceID,
+                newStatus: statusMap[selectedStatus],
+                notes: document.getElementById('contact-modal-notes').value
+            };
+
+            if (selectedStatus === 'postponed') {
+                data.postponeDuration = document.getElementById('contact-modal-postpone-duration').value;
+            } else if (selectedStatus === 'refused') {
+                data.refusalFollowUp = document.getElementById('contact-modal-refusal-follow-up').value;
+            }
+
+            handleApiCall(window.electronAPI.updateContactStatus, data, 'Status kontak berhasil diupdate!', 'Status kontak gagal di update');
+        });
+
         customerListContainer.addEventListener('click', (e) => {
             const card = e.target.closest('div.bg-white.rounded-lg');
             if (card) {
@@ -419,16 +451,15 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             }
         });
-        
-        // Event listener for buttons inside the detail modal
+
         customerDetailModal.addEventListener('click', (e) => {
             const button = e.target.closest('button[data-action]');
             if (!button) return;
             const action = button.dataset.action;
             switch (action) {
                 case 'call': window.electronAPI.openWhatsApp(button.dataset.phone); break;
-                case 'update-contact': if(selectedCustomer) { closeModal(customerDetailModal); setupAndOpenContactModal(selectedCustomer); } break;
-                case 'update-service': if(selectedCustomer) { closeModal(customerDetailModal); setupAndOpenServiceModal(selectedCustomer); } break;
+                case 'update-contact': if (selectedCustomer) { closeModal(customerDetailModal); setupAndOpenContactModal(selectedCustomer); } break;
+                case 'update-service': if (selectedCustomer) { closeModal(customerDetailModal); setupAndOpenServiceModal(selectedCustomer); } break;
                 case 'edit-note': setupAndOpenHistoryNoteModal(button.dataset); break;
                 case 'edit-customer': if(selectedCustomer) { closeModal(customerDetailModal); setupAndOpenUpdateCustomerModal(selectedCustomer); } break;
                 case 'delete-customer': 
@@ -439,42 +470,13 @@ document.addEventListener('DOMContentLoaded', () => {
                     break;
             }
         });
-        
+
         // Existing event listeners for other modals
         modals.forEach(modal => {
             modal.addEventListener('click', (e) => {
                 if (e.target.closest('[data-action="close"]')) closeModal(modal);
             });
             modal.addEventListener('input', () => validateForm(modal));
-        });
-
-        contactModalStatus.addEventListener('change', (e) => {
-            if (e.target.value === 'postponed') {
-                postponeDurationContainer.classList.remove('hidden');
-            } else {
-                postponeDurationContainer.classList.add('hidden');
-            }
-        });
-
-        // Event listener untuk tombol simpan di modal kontak
-        document.getElementById('contact-modal-save').addEventListener('click', () => {
-            closeModal(updateContactModal);
-
-            const statusMap = { 'not_contacted': 'UPCOMING', 'contacted': 'CONTACTED', 'overdue': 'OVERDUE', 'postponed': 'POSTPONED' };
-            const selectedStatus = contactModalStatus.value;
-
-            const data = {
-                serviceID: selectedCustomer.serviceID,
-                newStatus: statusMap[selectedStatus],
-                notes: document.getElementById('contact-modal-notes').value
-            };
-
-            // Jika statusnya 'Ditunda', tambahkan durasi penundaan ke data
-            if (selectedStatus === 'postponed') {
-                data.postponeDuration = document.getElementById('contact-modal-postpone-duration').value;
-            }
-
-            handleApiCall(window.electronAPI.updateContactStatus, data, 'Status kontak berhasil diupdate!', 'Status kontak gagal di update');
         });
 
         document.getElementById('service-modal-save').addEventListener('click', () => {
