@@ -20,7 +20,7 @@
 <body class="bg-gray-50">
 
     <div id="app-container" class="min-h-screen p-6">
-        <div class="max-w-6xl mx-auto">
+        <div class="max-w-full mx-auto">
             <div class="bg-white rounded-lg shadow-sm p-6 mb-6">
                 <div class="flex items-center justify-between mb-6">
                     <h1 class="text-base italic text-2xl font-bold text-blue-600 flex items-center">
@@ -46,35 +46,30 @@
                     </div>
                 </div>
 
-                <div class="space-y-4">
-                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                        <div class="bg-blue-100 p-4 rounded-lg text-center border border-blue-200">
-                            <p class="text-blue-700 text-sm font-medium">Total Pelanggan</p>
-                            <p id="stats-total" class="text-2xl font-bold text-blue-900">0</p>
-                        </div>
-                        <div class="bg-red-100 p-4 rounded-lg text-center border border-red-200">
-                            <p class="text-red-700 text-sm font-medium">Layanan Terlambat</p>
-                            <p id="stats-overdue" class="text-2xl font-bold text-red-900">0</p>
-                        </div>
-                        <div class="bg-yellow-100 p-4 rounded-lg text-center border border-yellow-200">
-                            <p class="text-yellow-700 text-sm font-medium">Jatuh Tempo Bulan Ini</p>
-                            <p id="stats-due-month" class="text-2xl font-bold text-yellow-900">0</p>
-                        </div>
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 mb-6">
+                    <div class="bg-blue-100 p-4 rounded-lg text-center border border-blue-200">
+                        <p class="text-blue-700 text-sm font-medium">Total Pelanggan</p>
+                        <p id="stats-total" class="text-2xl font-bold text-blue-900">0</p>
                     </div>
-
-                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                        <div class="bg-green-100 p-4 rounded-lg text-center border border-green-200">
-                            <p class="text-green-700 text-sm font-medium">Sudah Dihubungi</p>
-                            <p id="stats-contacted" class="text-2xl font-bold text-green-900">0</p>
-                        </div>
-                        <div class="bg-gray-200 p-4 rounded-lg text-center border border-gray-300">
-                            <p class="text-gray-700 text-sm font-medium">Belum Dihubungi</p>
-                            <p id="stats-not-contacted" class="text-2xl font-bold text-gray-900">0</p>
-                        </div>
-                        <div class="bg-gray-200 p-4 rounded-lg text-center border border-gray-300">
-                            <p class="text-gray-700 text-sm font-medium">Kontak Terlambat</p>
-                            <p id="stats-contact-overdue" class="text-2xl font-bold text-gray-900">0</p>
-                        </div>
+                    <div class="bg-red-100 p-4 rounded-lg text-center border border-red-200">
+                        <p class="text-red-700 text-sm font-medium">Layanan Terlambat</p>
+                        <p id="stats-overdue" class="text-2xl font-bold text-red-900">0</p>
+                    </div>
+                    <div class="bg-yellow-100 p-4 rounded-lg text-center border border-yellow-200">
+                        <p class="text-yellow-700 text-sm font-medium">Jatuh Tempo Bulan Ini</p>
+                        <p id="stats-due-month" class="text-2xl font-bold text-yellow-900">0</p>
+                    </div>
+                    <div class="bg-green-100 p-4 rounded-lg text-center border border-green-200">
+                        <p class="text-green-700 text-sm font-medium">Sudah Dihubungi</p>
+                        <p id="stats-contacted" class="text-2xl font-bold text-green-900">0</p>
+                    </div>
+                    <div class="bg-gray-200 p-4 rounded-lg text-center border border-gray-300">
+                        <p class="text-gray-700 text-sm font-medium">Belum Dihubungi</p>
+                        <p id="stats-not-contacted" class="text-2xl font-bold text-gray-900">0</p>
+                    </div>
+                    <div class="bg-gray-200 p-4 rounded-lg text-center border border-gray-300">
+                        <p class="text-gray-700 text-sm font-medium">Kontak Terlambat</p>
+                        <p id="stats-contact-overdue" class="text-2xl font-bold text-gray-900">0</p>
                     </div>
                 </div>
 
@@ -106,7 +101,7 @@
                 </div>
             </div>
 
-            <div id="customer-list" class="space-y-4"></div>
+            <div id="customer-list" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4"></div>
 
             <div id="empty-state" class="text-center py-12 hidden">
                 <i data-lucide="calendar" class="mx-auto text-gray-400 mb-4 h-12 w-12"></i>
@@ -134,7 +129,6 @@
     </div>
 
     <div id="modals-container">
-        <!-- Modal Update Service -->
         <div id="update-service-modal"
             class="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50 hidden">
             <div class="bg-white p-6 rounded-lg shadow-xl w-full max-w-md">
@@ -175,7 +169,6 @@
             </div>
         </div>
 
-        <!-- Modal Update Contact -->
         <div id="update-contact-modal"
             class="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50 hidden">
             <div class="bg-white p-6 rounded-lg shadow-xl w-full max-w-md">
@@ -220,7 +213,6 @@
             </div>
         </div>
 
-        <!-- Modal Add Customer -->
         <div id="add-customer-modal"
             class="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50 hidden">
             <div class="bg-white p-6 rounded-lg shadow-xl w-full max-w-md">
@@ -284,7 +276,6 @@
             </div>
         </div>
 
-        <!-- Modal Update Customer -->
         <div id="update-customer-modal"
             class="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50 hidden">
             <div class="bg-white p-6 rounded-lg shadow-xl w-full max-w-md">
@@ -335,7 +326,6 @@
             </div>
         </div>
 
-        <!-- Modal Update History Note -->
         <div id="update-history-note-modal"
             class="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50 hidden">
             <div class="bg-white p-6 rounded-lg shadow-xl w-full max-w-md">
@@ -369,6 +359,72 @@
                         </button>
                     </div>
                 </form>
+            </div>
+        </div>
+
+        <div id="customer-detail-modal" class="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50 hidden">
+            <div class="bg-white p-6 rounded-lg shadow-xl w-full max-w-2xl">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 id="detail-modal-name" class="text-xl font-bold"></h2>
+                    <button data-action="close" type="button" class="p-1 hover:bg-gray-200 rounded-full"><i data-lucide="x" class="h-5 w-5"></i></button>
+                </div>
+                
+                <div class="space-y-4">
+                    <div class="flex items-center gap-2">
+                        <span id="detail-modal-priority" class="px-2 py-0.5 rounded-full text-xs font-medium"></span>
+                        <span id="detail-modal-status" class="px-2 py-0.5 rounded-full text-xs font-medium border flex items-center">
+                            <i id="detail-modal-status-icon" data-lucide="clock" class="w-3.5 h-3.5"></i>
+                            <span id="detail-modal-status-text" class="ml-1.5"></span>
+                        </span>
+                    </div>
+                    
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 text-sm">
+                        <div>
+                            <p class="text-gray-500">Pengingat Berikutnya</p>
+                            <p id="detail-modal-next-service-date" class="font-semibold text-gray-800"></p>
+                            <p id="detail-modal-days-until" class="text-blue-600"></p>
+                        </div>
+                        <div>
+                            <p class="text-gray-500">Alamat</p>
+                            <p id="detail-modal-address" class="font-semibold text-gray-800"></p>
+                        </div>
+                        <div>
+                            <p class="text-gray-500">Kota</p>
+                            <p id="detail-modal-kota" class="font-semibold text-gray-800"></p>
+                        </div>
+                        <div>
+                            <p class="text-gray-500">Nomor Telepon</p>
+                            <p id="detail-modal-phone" class="font-semibold text-gray-800"></p>
+                        </div>
+                        <div>
+                            <p class="text-gray-500">Servis Terakhir</p>
+                            <p id="detail-modal-last-service" class="font-semibold text-gray-800"></p>
+                        </div>
+                        <div>
+                            <p class="text-gray-500">Teknisi</p>
+                            <p id="detail-modal-handler" class="font-semibold text-gray-800"></p>
+                        </div>
+                        <div class="col-span-1 md:col-span-2 lg:col-span-3">
+                            <p class="text-gray-500">Keterangan</p>
+                            <p id="detail-modal-notes" class="font-semibold text-gray-800"></p>
+                        </div>
+                    </div>
+
+                    <div class="mt-4">
+                        <h3 class="text-base font-bold text-gray-900 mb-2">Riwayat Servis</h3>
+                        <div id="detail-modal-history" class="text-xs bg-gray-50 p-2 rounded border overflow-x-auto">
+                            Tidak ada riwayat servis yang selesai.
+                        </div>
+                    </div>
+
+                </div>
+
+                <div class="flex justify-end gap-2 mt-6">
+                    <button data-action="call" id="detail-modal-call" class="px-3 py-2 text-sm rounded-md flex items-center justify-center whitespace-nowrap bg-green-100 text-green-800 hover:bg-green-200 transition-colors"><i data-lucide="message-circle" class="w-4 h-4 mr-2"></i> Kontak</button>
+                    <button data-action="update-contact" id="detail-modal-update-contact" class="px-3 py-2 text-sm rounded-md flex items-center justify-center whitespace-nowrap bg-purple-100 text-purple-800 hover:bg-purple-200 transition-colors"><i data-lucide="user-check" class="w-4 h-4 mr-2"></i> Kontak Update</button>
+                    <button data-action="update-service" id="detail-modal-update-service" class="px-3 py-2 text-sm rounded-md flex items-center justify-center whitespace-nowrap bg-blue-100 text-blue-800 hover:bg-blue-200 transition-colors"><i data-lucide="settings" class="w-4 h-4 mr-2"></i> Servis Update</button>
+                    <button data-action="close" class="px-4 py-2 bg-gray-300 rounded-md hover:bg-gray-400">Tutup</button>
+                </div>
             </div>
         </div>
     </div>
