@@ -59,6 +59,7 @@
                         <p class="text-yellow-700 text-sm font-medium">Jatuh Tempo Bulan Ini</p>
                         <p id="stats-due-month" class="text-2xl font-bold text-yellow-900">0</p>
                     </div>
+                    <p id="stats-due-2month" class="text-2xl font-bold text-yellow-900 hidden">0</p>
                     <div class="bg-green-100 p-4 rounded-lg text-center border border-green-200">
                         <p class="text-green-700 text-sm font-medium">Sudah Dihubungi</p>
                         <p id="stats-contacted" class="text-2xl font-bold text-green-900">0</p>
@@ -90,8 +91,9 @@
                             <i data-lucide="filter" class="text-gray-400 mr-2 h-5 w-5"></i>
                             <select id="filter-select" class="border-gray-300 rounded-lg px-3 py-2">
                                 <option value="all">Semua Pelanggan</option>
-                                <option value="overdue">Layanan Terlambat</option>
                                 <option value="upcoming">Jatuh Tempo Bulan Ini</option>
+                                <option value="upcoming">Jatuh Tempo 2 Bulan</option>
+                                <option value="overdue">Layanan Terlambat</option>
                                 <option value="contacted">Sudah Dihubungi</option>
                                 <option value="not_contacted">Belum Dihubungi</option>
                                 <option value="contact_overdue">Kontak Terlambat</option>
