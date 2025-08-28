@@ -242,7 +242,7 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('detail-modal-edit').dataset.customerId = customer.customerID;
         document.getElementById('detail-modal-delete').dataset.customerId = customer.customerID;
         document.getElementById('detail-modal-delete').dataset.customerName = customer.name;
-        
+
         if (window.lucide) window.lucide.createIcons();
         openModal(customerDetailModal);
     }
@@ -291,32 +291,45 @@ document.addEventListener('DOMContentLoaded', () => {
 
         sortedAndFilteredCustomers.forEach(customer => {
             const priority = calculatePriority(customer);
+            let bgColorClass = '';
+            switch (priority) {
+                case 'Sangat Mendesak':
+                case 'Tinggi':
+                    bgColorClass = 'bg-red-50';
+                    break;
+                case 'Sedang':
+                    bgColorClass = 'bg-yellow-50';
+                    break;
+                case 'Rendah':
+                    bgColorClass = 'bg-green-50';
+                    break;
+                default:
+                    bgColorClass = 'bg-white';
+            }
+
             const card = document.createElement('div');
-            card.className = 'bg-white rounded-lg shadow-sm border border-gray-200 p-4 hover:shadow-md transition-shadow cursor-pointer';
+            card.className = `flex items-center justify-between p-4 rounded-lg shadow-sm border border-gray-200 hover:shadow-md transition-shadow cursor-pointer ${bgColorClass}`;
             card.dataset.customerId = customer.customerID;
             card.innerHTML = `
-                <div class="flex items-center justify-between mb-2">
-                    <h3 class="text-lg font-bold text-gray-900">${customer.name}</h3>
-                    <span class="px-2 py-0.5 rounded-full text-xs font-medium ${getPriorityColor(priority)}">${priority}</span>
+                <div class="flex items-center gap-4 flex-grow">
+                    <h3 class="text-lg font-bold text-gray-900 flex-shrink-0">${customer.name}</h3>
+                    <div class="relative pl-4 data-separator hidden md:block">
+                        <span class="text-sm font-medium text-gray-600">${customer.kota || 'N/A'}</span>
+                    </div>
+                    <div class="relative pl-4 data-separator flex-grow">
+                        <span class="text-sm font-medium text-gray-600">Servis Berikutnya: <span class="font-bold">${formatDate(customer.nextService)}</span></span>
+                    </div>
                 </div>
-                <div class="space-y-1">
-                    <div class="flex items-center gap-2 text-sm text-gray-600">
-                        <i data-lucide="map-pin" class="w-4 h-4"></i>
-                        <span>${customer.kota || 'N/A'}</span>
-                    </div>
-                    <div class="flex items-center gap-2 text-sm text-gray-600">
-                        <i data-lucide="calendar" class="w-4 h-4"></i>
-                        <span>${formatDate(customer.nextService)}</span>
-                    </div>
+                <div class="flex-shrink-0">
+                    <span class="px-2 py-0.5 rounded-full text-xs font-medium ${getPriorityColor(priority)}">${priority}</span>
                 </div>
             `;
             customerListContainer.appendChild(card);
         });
 
         document.getElementById('stats-total').textContent = customers.length;
-        document.getElementById('stats-due-month').textContent = customers.filter(c => { if (!c.nextService) return false; const d = new Date(c.nextService); if (isNaN(d.getTime())) return false; const diff = Math.ceil((d - today) / (1000 * 60 * 60 * 24)); return diff >= 0 && diff <= 30; }).length;
-        document.getElementById('stats-due-2month').textContent = customers.filter(c => { if (!c.nextService) return false; const d = new Date(c.nextService); if (isNaN(d.getTime())) return false; const diff = Math.ceil((d - today) / (1000 * 60 * 60 * 24)); return diff >= 0 && diff <= 60; }).length;
         document.getElementById('stats-overdue').textContent = customers.filter(c => { if (!c.nextService) return false; const d = new Date(c.nextService); return !isNaN(d.getTime()) && d < today && c.status !== 'COMPLETED'; }).length;
+        document.getElementById('stats-due-month').textContent = customers.filter(c => { if (!c.nextService) return false; const d = new Date(c.nextService); if (isNaN(d.getTime())) return false; const diff = Math.ceil((d - today) / (1000 * 60 * 60 * 24)); return diff >= 0 && diff <= 30; }).length;
         document.getElementById('stats-contacted').textContent = customers.filter(c => c.status === 'COMPLETED').length;
         document.getElementById('stats-not-contacted').textContent = customers.filter(c => c.status === 'UPCOMING').length;
         document.getElementById('stats-contact-overdue').textContent = customers.filter(c => c.status === 'OVERDUE').length;
@@ -476,7 +489,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         customerListContainer.addEventListener('click', (e) => {
-            const card = e.target.closest('div.bg-white.rounded-lg');
+            const card = e.target.closest('div[data-customer-id]');
             if (card) {
                 const customerId = card.dataset.customerId;
                 const customer = customers.find(c => c.customerID === customerId);
