@@ -131,7 +131,7 @@
 
     <div id="modals-container">
         <div id="update-service-modal"
-            class="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50 hidden">
+            class="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-[51] hidden">
             <div class="bg-white p-6 rounded-lg shadow-xl w-full max-w-md">
                 <form onsubmit="return false;">
                     <div class="flex justify-between items-center mb-4">
@@ -171,7 +171,7 @@
         </div>
 
         <div id="update-contact-modal"
-            class="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50 hidden">
+            class="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-[51] hidden">
             <div class="bg-white p-6 rounded-lg shadow-xl w-full max-w-md">
                 <form onsubmit="return false;">
                     <div class="flex justify-between items-center mb-4">
@@ -238,7 +238,7 @@
         </div>
 
         <div id="add-customer-modal"
-            class="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50 hidden">
+            class="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-[51] hidden">
             <div class="bg-white p-6 rounded-lg shadow-xl w-full max-w-md">
                 <form onsubmit="return false;">
                     <div class="flex justify-between items-center mb-4">
@@ -308,7 +308,7 @@
         </div>
 
         <div id="update-customer-modal"
-            class="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50 hidden">
+            class="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-[51] hidden">
             <div class="bg-white p-6 rounded-lg shadow-xl w-full max-w-md">
                 <form onsubmit="return false;">
                     <div class="flex justify-between items-center mb-4">
@@ -365,7 +365,7 @@
         </div>
 
         <div id="update-history-note-modal"
-            class="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50 hidden">
+            class="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-[52] hidden">
             <div class="bg-white p-6 rounded-lg shadow-xl w-full max-w-md">
                 <form onsubmit="return false;">
                     <div class="flex justify-between items-center mb-4">
@@ -373,9 +373,9 @@
                         <button data-action="close" type="button" class="p-1 hover:bg-gray-200 rounded-full"><i
                                 data-lucide="x" class="h-5 w-5"></i></button>
                     </div>
-                    <p id="history-note-modal-info" class="text-sm text-gray-600 mb-4">Mengubah catatan untuk...</p>
                     <div class="space-y-4">
                         <div>
+                            <p id="history-note-modal-info" class="text-sm text-gray-600 mb-4">Mengubah catatan untuk...</p>
                             <label for="history-note-modal-handler"
                                 class="block text-sm font-medium text-gray-700">Teknisi</label>
                             <input type="text" id="history-note-modal-handler"
@@ -392,8 +392,8 @@
                         <button data-action="close" type="button"
                             class="px-4 py-2 bg-gray-300 rounded-md hover:bg-gray-400">Batal</button>
                         <button id="history-note-modal-save" type="submit"
-                            class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">
-                            Simpan Perubahan
+                             class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 flex items-center">
+                            <i data-lucide="save" class="h-4 w-4 mr-2"></i> Simpan Perubahan
                         </button>
                     </div>
                 </form>
@@ -401,7 +401,7 @@
         </div>
 
         <div id="customer-detail-modal"
-            class="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50 hidden">
+            class="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-[50] hidden">
             <div class="bg-white p-6 rounded-lg shadow-xl w-full max-w-2xl">
                 <div class="flex justify-between items-center mb-4">
                     <h2 id="detail-modal-name" class="text-xl font-bold"></h2>

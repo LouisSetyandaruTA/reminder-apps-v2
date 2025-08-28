@@ -26,6 +26,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const postponeDurationContainer = document.getElementById('postpone-duration-container');
     const customerDetailModal = document.getElementById('customer-detail-modal');
     const refusalFollowUpContainer = document.getElementById('refusal-follow-up-container');
+    const contactModalPostponeDuration = document.getElementById('contact-modal-postpone-duration');
+    const contactModalRefusalFollowUp = document.getElementById('contact-modal-refusal-follow-up');
 
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -240,7 +242,7 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('detail-modal-edit').dataset.customerId = customer.customerID;
         document.getElementById('detail-modal-delete').dataset.customerId = customer.customerID;
         document.getElementById('detail-modal-delete').dataset.customerName = customer.name;
-
+        
         if (window.lucide) window.lucide.createIcons();
         openModal(customerDetailModal);
     }
@@ -337,11 +339,12 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('contact-modal-name').textContent = customer.name;
         document.getElementById('contact-modal-phone').textContent = customer.phone;
 
-        document.getElementById('contact-modal-status').value = customer.status === 'COMPLETED' ? 'contacted' : (customer.status === 'OVERDUE' ? 'overdue' : 'not_contacted');
+        document.getElementById('contact-modal-status').value = customer.status === 'CONTACTED' ? 'contacted' : (customer.status === 'OVERDUE' ? 'overdue' : 'not_contacted');
         document.getElementById('contact-modal-notes').value = customer.notes || '';
 
-        postponeDurationContainer.classList.add('hidden');
-        refusalFollowUpContainer.classList.add('hidden');
+        // Tampilkan/sembunyikan input tambahan
+        postponeDurationContainer.classList.toggle('hidden', document.getElementById('contact-modal-status').value !== 'postponed');
+        refusalFollowUpContainer.classList.toggle('hidden', document.getElementById('contact-modal-status').value !== 'refused');
 
         openModal(updateContactModal);
     }
@@ -379,14 +382,26 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (successMessage) {
                     alert(successMessage);
                 }
-                initializeApp();
+                const refreshedData = await window.electronAPI.refreshData();
+                if (refreshedData.success) {
+                    customers = refreshedData.data || [];
+                    const updatedCustomer = customers.find(c => c.customerID === selectedCustomer?.customerID);
+                    if (updatedCustomer) {
+                        showCustomerDetails(updatedCustomer);
+                    } else {
+                        renderCustomers();
+                    }
+                } else {
+                    throw new Error(refreshedData.error || 'Gagal me-refresh data.');
+                }
             } else {
                 throw new Error(result.error || 'Terjadi kesalahan tidak diketahui.');
             }
         } catch (err) {
             console.error('API Call Error:', err);
             alert(`${errorMessagePrefix}: ${err.message}`);
-            // Tidak memanggil initializeApp() di sini karena mungkin data sedang dalam state tidak konsisten
+            // Fallback to re-render if there's an error
+            renderCustomers();
         } finally {
             hideLoading();
         }
@@ -399,7 +414,9 @@ document.addEventListener('DOMContentLoaded', () => {
         filterSelect.addEventListener('change', (e) => { filterBy = e.target.value; renderCustomers(); });
         cityFilterSelect.addEventListener('change', (e) => { filterByCity = e.target.value; renderCustomers(); });
 
-        document.getElementById('add-customer-btn').addEventListener('click', setupAndOpenAddCustomerModal);
+        document.getElementById('add-customer-btn').addEventListener('click', () => {
+            setupAndOpenAddCustomerModal();
+        });
         document.getElementById('refresh-btn').addEventListener('click', initializeApp);
         document.getElementById('retry-btn').addEventListener('click', initializeApp);
 
@@ -426,7 +443,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
         document.getElementById('contact-modal-save').addEventListener('click', () => {
             closeModal(updateContactModal);
-
             const statusMap = {
                 'not_contacted': 'UPCOMING',
                 'contacted': 'CONTACTED',
@@ -435,19 +451,16 @@ document.addEventListener('DOMContentLoaded', () => {
                 'refused': 'REFUSED'
             };
             const selectedStatus = contactModalStatus.value;
-
             const data = {
                 serviceID: selectedCustomer.serviceID,
                 newStatus: statusMap[selectedStatus],
                 notes: document.getElementById('contact-modal-notes').value
             };
-
             if (selectedStatus === 'postponed') {
-                data.postponeDuration = document.getElementById('contact-modal-postpone-duration').value;
+                data.postponeDuration = contactModalPostponeDuration.value;
             } else if (selectedStatus === 'refused') {
-                data.refusalFollowUp = document.getElementById('contact-modal-refusal-follow-up').value;
+                data.refusalFollowUp = contactModalRefusalFollowUp.value;
             }
-
             handleApiCall(window.electronAPI.updateContactStatus, data, 'Status kontak berhasil diupdate!', 'Status kontak gagal di update');
         });
 
@@ -468,12 +481,13 @@ document.addEventListener('DOMContentLoaded', () => {
             const action = button.dataset.action;
             switch (action) {
                 case 'call': window.electronAPI.openWhatsApp(button.dataset.phone); break;
-                case 'update-contact': if (selectedCustomer) { closeModal(customerDetailModal); setupAndOpenContactModal(selectedCustomer); } break;
-                case 'update-service': if (selectedCustomer) { closeModal(customerDetailModal); setupAndOpenServiceModal(selectedCustomer); } break;
-                case 'edit-note': setupAndOpenHistoryNoteModal(button.dataset); break;
-                case 'edit-customer': if (selectedCustomer) { closeModal(customerDetailModal); setupAndOpenUpdateCustomerModal(selectedCustomer); } break;
+                case 'update-contact': if (selectedCustomer) { setupAndOpenContactModal(selectedCustomer); } break;
+                case 'update-service': if (selectedCustomer) { setupAndOpenServiceModal(selectedCustomer); } break;
+                case 'edit-note': if(selectedCustomer) { setupAndOpenHistoryNoteModal(button.dataset); } break;
+                case 'edit-customer': if (selectedCustomer) { setupAndOpenUpdateCustomerModal(selectedCustomer); } break;
                 case 'delete-customer':
                     if (confirm(`Yakin ingin menghapus ${button.dataset.customerName}?`)) {
+                        closeModal(customerDetailModal);
                         handleApiCall(
                             window.electronAPI.deleteCustomer,
                             button.dataset.customerId,
@@ -484,11 +498,13 @@ document.addEventListener('DOMContentLoaded', () => {
                     break;
             }
         });
-
+        
         // Existing event listeners for other modals
         modals.forEach(modal => {
             modal.addEventListener('click', (e) => {
-                if (e.target.closest('[data-action="close"]')) closeModal(modal);
+                if (e.target.closest('[data-action="close"]')) {
+                    closeModal(modal);
+                }
             });
             modal.addEventListener('input', () => validateForm(modal));
         });
@@ -504,7 +520,9 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         document.getElementById('history-note-modal-save').addEventListener('click', () => {
-            if (!confirm('Yakin ingin menyimpan perubahan pada riwayat ini?')) return;
+            if (!confirm('Yakin ingin menyimpan perubahan pada riwayat ini?')) {
+                return;
+            }
             closeModal(updateHistoryNoteModal);
             const data = {
                 serviceID: selectedServiceForNoteEdit.serviceId,
