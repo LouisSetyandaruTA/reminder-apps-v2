@@ -312,8 +312,9 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         document.getElementById('stats-total').textContent = customers.length;
-        document.getElementById('stats-overdue').textContent = customers.filter(c => { if (!c.nextService) return false; const d = new Date(c.nextService); return !isNaN(d.getTime()) && d < today && c.status !== 'COMPLETED'; }).length;
         document.getElementById('stats-due-month').textContent = customers.filter(c => { if (!c.nextService) return false; const d = new Date(c.nextService); if (isNaN(d.getTime())) return false; const diff = Math.ceil((d - today) / (1000 * 60 * 60 * 24)); return diff >= 0 && diff <= 30; }).length;
+        document.getElementById('stats-due-2month').textContent = customers.filter(c => { if (!c.nextService) return false; const d = new Date(c.nextService); if (isNaN(d.getTime())) return false; const diff = Math.ceil((d - today) / (1000 * 60 * 60 * 24)); return diff >= 0 && diff <= 60; }).length;
+        document.getElementById('stats-overdue').textContent = customers.filter(c => { if (!c.nextService) return false; const d = new Date(c.nextService); return !isNaN(d.getTime()) && d < today && c.status !== 'COMPLETED'; }).length;
         document.getElementById('stats-contacted').textContent = customers.filter(c => c.status === 'COMPLETED').length;
         document.getElementById('stats-not-contacted').textContent = customers.filter(c => c.status === 'UPCOMING').length;
         document.getElementById('stats-contact-overdue').textContent = customers.filter(c => c.status === 'OVERDUE').length;
@@ -404,11 +405,21 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('retry-btn').addEventListener('click', initializeApp);
 
         document.getElementById('export-data-btn').addEventListener('click', async () => {
-            const result = await window.electronAPI.exportData();
-            if (result.success) {
-                alert(`Data berhasil diekspor dan disimpan di:\n${result.path}`);
-            } else {
-                alert(`Gagal mengekspor data: ${result.error}`);
+            showLoading(); // Tampilkan loading indicator
+
+            try {
+                const result = await window.electronAPI.exportData();
+                hideLoading();
+
+                if (result.success) {
+                    alert(`Data berhasil diekspor dan disimpan di:\n${result.path}`);
+                } else {
+                    alert(`Gagal mengekspor data: ${result.error}`);
+                }
+            } catch (error) {
+                hideLoading();
+                console.error('Error during export:', error);
+                alert('Terjadi kesalahan saat mengekspor data. Silakan coba lagi.');
             }
         });
 

@@ -45,12 +45,12 @@ try:
     
     all_notes = df.groupby('customerID').apply(format_all_notes).reset_index(name='all_notes')
 
-    # 5. AMBIL INFO PELANGGAN
+    # 5. AMBIL INFO PELANGGAN (DENGAN NOTES PELANGGAN)
     customer_info = df.groupby('customerID').first().reset_index()
     
     # Daftar kolom yang mungkin ada
     available_columns = customer_info.columns.tolist()
-    desired_columns = ['customerID', 'name', 'address', 'phone', 'kota']
+    desired_columns = ['customerID', 'name', 'address', 'phone', 'kota', 'customerNotes']
     
     # Hanya ambil kolom yang benar-benar ada
     columns_to_keep = [col for col in desired_columns if col in available_columns]
@@ -63,11 +63,19 @@ try:
     # Servis rutin adalah servis selain yang pertama (pemasangan)
     routine_services = df[df['service_rank'] > 1].copy()
     
+    # Pastikan urutan servis benar dengan sorting berdasarkan tanggal
+    routine_services = routine_services.sort_values(by=['customerID', 'serviceDate'])
+    
+    # Buat nomor urut servis yang benar (1, 2, 3, ... bukan 1, 10, 2, 3)
+    routine_services['service_num'] = routine_services.groupby('customerID').cumcount() + 1
+    
+    # Format nomor servis dengan leading zeros untuk pengurutan yang benar
+    routine_services['service_num_padded'] = routine_services['service_num'].apply(lambda x: f"Servis {x:02d}")
+    
     # Pivot hanya tanggal servis rutin
-    routine_services['service_num'] = 'Servis ' + (routine_services.groupby('customerID').cumcount() + 1).astype(str)
     service_history_wide = routine_services.pivot_table(
         index='customerID',
-        columns='service_num',
+        columns='service_num_padded',
         values='serviceDate',
         aggfunc='first'
     ).reset_index()
@@ -92,6 +100,7 @@ try:
         'address': 'Alamat', 
         'phone': 'Nomor Telepon',
         'kota': 'Kota',
+        'customerNotes': 'Notes Pelanggan',
         'tanggal_pemasangan': 'Tanggal Pemasangan',
         'all_notes': 'Catatan Servis'
     }
@@ -101,21 +110,52 @@ try:
         if old_name in final_df.columns:
             final_df.rename(columns={old_name: new_name}, inplace=True)
     
-    # 9. URUTKAN KOLOM
-    base_columns = ['No', 'Nama', 'Alamat', 'Kota', 'Nomor Telepon', 
-                   'Tanggal Pemasangan', 'Catatan Servis']
+    # 9. URUTKAN KOLOM SERVIS DENGAN BENAR
+    # Dapatkan semua kolom
+    all_columns = final_df.columns.tolist()
     
-    # Tambahkan kolom servis rutin
-    service_cols = [col for col in final_df.columns if col.startswith('Servis ')]
-    base_columns.extend(service_cols)
+    # Pisahkan kolom base dan kolom servis
+    base_columns = ['No', 'Nama', 'Alamat', 'Kota', 'Nomor Telepon', 
+                   'Notes Pelanggan', 'Tanggal Pemasangan', 'Catatan Servis']
+    
+    # Ambil hanya kolom servis
+    service_columns = [col for col in all_columns if col.startswith('Servis ')]
+    
+    # Urutkan kolom servis secara numerik (bukan lexicographical)
+    def extract_service_number(col_name):
+        try:
+            return int(col_name.replace('Servis ', ''))
+        except:
+            return 0
+    
+    service_columns_sorted = sorted(service_columns, key=extract_service_number)
+    
+    # Gabungkan kolom base dengan kolom servis yang sudah diurutkan
+    final_columns = base_columns + service_columns_sorted
     
     # Pastikan hanya kolom yang ada yang disertakan
-    final_columns = [col for col in base_columns if col in final_df.columns]
+    final_columns = [col for col in final_columns if col in final_df.columns]
     
     # Reindex DataFrame
     final_df = final_df[final_columns]
 
-    # 10. SIMPAN KE FILE
+    # 10. RENAME KOLOM SERVIS UNTUK MENGHILANGKAN LEADING ZEROS (Opsional)
+    # Ubah "Servis 01", "Servis 02" kembali menjadi "Servis 1", "Servis 2", dst.
+    rename_dict = {}
+    for col in final_df.columns:
+        if col.startswith('Servis '):
+            try:
+                # Ekstrak angka dan format ulang tanpa leading zero
+                num = int(col.replace('Servis ', ''))
+                new_name = f"Servis {num}"
+                rename_dict[col] = new_name
+            except:
+                pass
+    
+    if rename_dict:
+        final_df.rename(columns=rename_dict, inplace=True)
+
+    # 11. SIMPAN KE FILE
     # --- PROSES UNTUK FILE EXCEL (.xlsx) ---
     path_xlsx = base_output_path + '.xlsx'
     
@@ -147,7 +187,7 @@ try:
         
         # Terapkan format ke kolom
         for col_idx, col_name in enumerate(df_for_excel.columns):
-            if col_name == 'Catatan Servis':
+            if col_name in ['Notes Pelanggan', 'Catatan Servis']:
                 worksheet.set_column(col_idx, col_idx, 40, wrap_format)  # Lebar 40 untuk notes dengan wrap text
             elif col_name == 'Nama':
                 worksheet.set_column(col_idx, col_idx, 20, text_format)  # Lebar 20 untuk nama
