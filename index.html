@@ -14,6 +14,19 @@
             /* gray-400 */
             cursor: not-allowed;
         }
+
+        /* Menambahkan garis vertikal sebagai pemisah antar data untuk tampilan daftar */
+        .data-separator::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 50%;
+            transform: translateY(-50%);
+            height: 70%;
+            width: 1px;
+            background-color: #e5e7eb;
+            /* gray-200 */
+        }
     </style>
 </head>
 
@@ -59,7 +72,6 @@
                         <p class="text-yellow-700 text-sm font-medium">Jatuh Tempo Bulan Ini</p>
                         <p id="stats-due-month" class="text-2xl font-bold text-yellow-900">0</p>
                     </div>
-                    <p id="stats-due-2month" class="text-2xl font-bold text-yellow-900 hidden">0</p>
                     <div class="bg-green-100 p-4 rounded-lg text-center border border-green-200">
                         <p class="text-green-700 text-sm font-medium">Sudah Dihubungi</p>
                         <p id="stats-contacted" class="text-2xl font-bold text-green-900">0</p>
@@ -86,40 +98,51 @@
                             <option value="all">Semua Kota</option>
                         </select>
                     </div>
-                    <div class="flex items-center gap-4">
-                        <div class="flex items-center">
-                            <i data-lucide="filter" class="text-gray-400 mr-2 h-5 w-5"></i>
-                            <select id="filter-select" class="border-gray-300 rounded-lg px-3 py-2">
-                                <option value="all">Semua Pelanggan</option>
-                                <option value="upcoming">Jatuh Tempo Bulan Ini</option>
-                                <option value="upcoming">Jatuh Tempo 2 Bulan</option>
-                                <option value="overdue">Layanan Terlambat</option>
-                                <option value="contacted">Sudah Dihubungi</option>
-                                <option value="not_contacted">Belum Dihubungi</option>
-                                <option value="contact_overdue">Kontak Terlambat</option>
-                            </select>
+                    <div class="flex items-center">
+                        <i data-lucide="filter" class="text-gray-400 mr-2 h-5 w-5"></i>
+                        <select id="filter-select" class="border-gray-300 rounded-lg px-3 py-2">
+                            <option value="all">Semua Pelanggan</option>
+                            <option value="overdue">Layanan Terlambat</option>
+                            <option value="upcoming">Jatuh Tempo Bulan Ini</option>
+                            <option value="contacted">Sudah Dihubungi</option>
+                            <option value="not_contacted">Belum Dihubungi</option>
+                            <option value="contact_overdue">Kontak Terlambat</option>
+                        </select>
+                    </div>
+                    <!-- View Switcher -->
+                    <div class="flex items-center">
+                        <span class="text-sm font-medium text-gray-700 mr-2">Tampilan:</span>
+                        <div class="flex rounded-md shadow-sm">
+                            <button id="view-bubble-btn" type="button"
+                                class="relative inline-flex items-center px-3 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 focus:z-10 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500">
+                                <i data-lucide="layout-grid" class="h-5 w-5"></i>
+                            </button>
+                            <button id="view-list-btn" type="button"
+                                class="-ml-px relative inline-flex items-center px-3 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 focus:z-10 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500">
+                                <i data-lucide="list" class="h-5 w-5"></i>
+                            </button>
                         </div>
                     </div>
                 </div>
             </div>
 
-            <div id="customer-list"
-                class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4"></div>
+            <!-- Container ini akan diubah kelasnya oleh JavaScript -->
+            <div id="customer-list"></div>
 
             <div id="empty-state" class="text-center py-12 hidden">
-                <i data-lucide="calendar" class="mx-auto text-gray-400 mb-4 h-12 w-12"></i>
+                <i data-lucide="users" class="mx-auto text-gray-400 mb-4 h-12 w-12"></i>
                 <p class="text-gray-600">Tidak ada pelanggan yang cocok dengan filter saat ini.</p>
             </div>
         </div>
     </div>
 
+    <!-- Loading and Error Indicators -->
     <div id="loading-indicator" class="fixed inset-0 bg-gray-50 flex items-center justify-center z-50">
         <div class="text-center">
             <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
             <p class="text-gray-600">Memuat data pelanggan...</p>
         </div>
     </div>
-
     <div id="error-indicator" class="fixed inset-0 bg-gray-50 flex items-center justify-center z-50 hidden">
         <div class="text-center bg-white p-8 rounded-lg shadow-sm">
             <i data-lucide="alert-circle" class="text-red-600 mx-auto mb-4 h-12 w-12"></i>
@@ -131,9 +154,11 @@
         </div>
     </div>
 
+    <!-- Modals Container -->
     <div id="modals-container">
+        <!-- Update Service Modal -->
         <div id="update-service-modal"
-            class="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50 hidden">
+            class="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-[51] hidden">
             <div class="bg-white p-6 rounded-lg shadow-xl w-full max-w-md">
                 <form onsubmit="return false;">
                     <div class="flex justify-between items-center mb-4">
@@ -172,8 +197,9 @@
             </div>
         </div>
 
+        <!-- Update Contact Modal -->
         <div id="update-contact-modal"
-            class="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50 hidden">
+            class="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-[51] hidden">
             <div class="bg-white p-6 rounded-lg shadow-xl w-full max-w-md">
                 <form onsubmit="return false;">
                     <div class="flex justify-between items-center mb-4">
@@ -239,8 +265,9 @@
             </div>
         </div>
 
+        <!-- Add Customer Modal -->
         <div id="add-customer-modal"
-            class="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50 hidden">
+            class="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-[51] hidden">
             <div class="bg-white p-6 rounded-lg shadow-xl w-full max-w-md">
                 <form onsubmit="return false;">
                     <div class="flex justify-between items-center mb-4">
@@ -309,8 +336,9 @@
             </div>
         </div>
 
+        <!-- Update Customer Modal -->
         <div id="update-customer-modal"
-            class="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50 hidden">
+            class="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-[51] hidden">
             <div class="bg-white p-6 rounded-lg shadow-xl w-full max-w-md">
                 <form onsubmit="return false;">
                     <div class="flex justify-between items-center mb-4">
@@ -366,8 +394,9 @@
             </div>
         </div>
 
+        <!-- Update History Note Modal -->
         <div id="update-history-note-modal"
-            class="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50 hidden">
+            class="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-[52] hidden">
             <div class="bg-white p-6 rounded-lg shadow-xl w-full max-w-md">
                 <form onsubmit="return false;">
                     <div class="flex justify-between items-center mb-4">
@@ -402,67 +431,72 @@
             </div>
         </div>
 
+        <!-- Customer Detail Modal -->
         <div id="customer-detail-modal"
-            class="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50 hidden">
-            <div class="bg-white p-6 rounded-lg shadow-xl w-full max-w-2xl">
-                <div class="flex justify-between items-center mb-4">
+            class="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-[50] p-4 hidden">
+            <div class="bg-white rounded-lg shadow-xl w-full max-w-2xl flex flex-col max-h-full">
+                <!-- Modal Header -->
+                <div class="flex-shrink-0 p-6 pb-4 flex justify-between items-center border-b">
                     <h2 id="detail-modal-name" class="text-xl font-bold"></h2>
                     <button data-action="close" type="button" class="p-1 hover:bg-gray-200 rounded-full"><i
                             data-lucide="x" class="h-5 w-5"></i></button>
                 </div>
 
-                <div class="space-y-4">
-                    <div class="flex items-center gap-2">
-                        <span id="detail-modal-priority" class="px-2 py-0.5 rounded-full text-xs font-medium"></span>
-                        <span id="detail-modal-status"
-                            class="px-2 py-0.5 rounded-full text-xs font-medium border flex items-center">
-                            <i id="detail-modal-status-icon" data-lucide="clock" class="w-3.5 h-3.5"></i>
-                            <span id="detail-modal-status-text" class="ml-1.5"></span>
-                        </span>
+                <!-- Scrollable Modal Body -->
+                <div class="flex-grow overflow-y-auto p-6">
+                    <div class="space-y-4">
+                        <div class="flex items-center gap-2">
+                            <span id="detail-modal-priority"
+                                class="px-2 py-0.5 rounded-full text-xs font-medium"></span>
+                            <span id="detail-modal-status"
+                                class="px-2 py-0.5 rounded-full text-xs font-medium border flex items-center">
+                                <i id="detail-modal-status-icon" data-lucide="clock" class="w-3.5 h-3.5"></i>
+                                <span id="detail-modal-status-text" class="ml-1.5"></span>
+                            </span>
+                        </div>
+                        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 text-sm">
+                            <div>
+                                <p class="text-gray-500">Pengingat Berikutnya</p>
+                                <p id="detail-modal-next-service-date" class="font-semibold text-gray-800"></p>
+                                <p id="detail-modal-days-until" class="text-blue-600"></p>
+                            </div>
+                            <div>
+                                <p class="text-gray-500">Alamat</p>
+                                <p id="detail-modal-address" class="font-semibold text-gray-800"></p>
+                            </div>
+                            <div>
+                                <p class="text-gray-500">Kota</p>
+                                <p id="detail-modal-kota" class="font-semibold text-gray-800"></p>
+                            </div>
+                            <div>
+                                <p class="text-gray-500">Nomor Telepon</p>
+                                <p id="detail-modal-phone" class="font-semibold text-gray-800"></p>
+                            </div>
+                            <div>
+                                <p class="text-gray-500">Servis Terakhir</p>
+                                <p id="detail-modal-last-service" class="font-semibold text-gray-800"></p>
+                            </div>
+                            <div>
+                                <p class="text-gray-500">Teknisi</p>
+                                <p id="detail-modal-handler" class="font-semibold text-gray-800"></p>
+                            </div>
+                            <div class="col-span-1 md:col-span-2 lg:col-span-3">
+                                <p class="text-gray-500">Keterangan</p>
+                                <p id="detail-modal-notes" class="font-semibold text-gray-800"></p>
+                            </div>
+                        </div>
+                        <div class="mt-4">
+                            <h3 class="text-base font-bold text-gray-900 mb-2">Riwayat Servis</h3>
+                            <div id="detail-modal-history"
+                                class="text-xs bg-gray-50 p-2 rounded border overflow-x-auto">
+                                Tidak ada riwayat servis yang selesai.
+                            </div>
+                        </div>
                     </div>
-
-                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 text-sm">
-                        <div>
-                            <p class="text-gray-500">Pengingat Berikutnya</p>
-                            <p id="detail-modal-next-service-date" class="font-semibold text-gray-800"></p>
-                            <p id="detail-modal-days-until" class="text-blue-600"></p>
-                        </div>
-                        <div>
-                            <p class="text-gray-500">Alamat</p>
-                            <p id="detail-modal-address" class="font-semibold text-gray-800"></p>
-                        </div>
-                        <div>
-                            <p class="text-gray-500">Kota</p>
-                            <p id="detail-modal-kota" class="font-semibold text-gray-800"></p>
-                        </div>
-                        <div>
-                            <p class="text-gray-500">Nomor Telepon</p>
-                            <p id="detail-modal-phone" class="font-semibold text-gray-800"></p>
-                        </div>
-                        <div>
-                            <p class="text-gray-500">Servis Terakhir</p>
-                            <p id="detail-modal-last-service" class="font-semibold text-gray-800"></p>
-                        </div>
-                        <div>
-                            <p class="text-gray-500">Teknisi</p>
-                            <p id="detail-modal-handler" class="font-semibold text-gray-800"></p>
-                        </div>
-                        <div class="col-span-1 md:col-span-2 lg:col-span-3">
-                            <p class="text-gray-500">Keterangan</p>
-                            <p id="detail-modal-notes" class="font-semibold text-gray-800"></p>
-                        </div>
-                    </div>
-
-                    <div class="mt-4">
-                        <h3 class="text-base font-bold text-gray-900 mb-2">Riwayat Servis</h3>
-                        <div id="detail-modal-history" class="text-xs bg-gray-50 p-2 rounded border overflow-x-auto">
-                            Tidak ada riwayat servis yang selesai.
-                        </div>
-                    </div>
-
                 </div>
 
-                <div class="flex justify-end gap-2 mt-6">
+                <!-- Modal Footer -->
+                <div class="flex-shrink-0 p-6 pt-4 flex flex-wrap justify-end gap-2 border-t">
                     <button data-action="call" id="detail-modal-call"
                         class="px-3 py-2 text-sm rounded-md flex items-center justify-center whitespace-nowrap bg-green-100 text-green-800 hover:bg-green-200 transition-colors"><i
                             data-lucide="message-circle" class="w-4 h-4 mr-2"></i> Kontak</button>
@@ -485,7 +519,7 @@
         </div>
     </div>
 
-    <script type="module" src="/src/script.js"></script>
+    <script type="module" src="./src/script.js"></script>
 </body>
 
 </html>
