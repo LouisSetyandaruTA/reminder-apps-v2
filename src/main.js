@@ -7,6 +7,7 @@ import creds from './credentials.json' with { type: 'json' };
 import { PythonShell } from 'python-shell';
 import csv from 'csv-parser';
 import fs from 'fs';
+import os from 'os';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -192,22 +193,38 @@ async function checkUpcomingServices() {
     const data = await getDataFromSheets();
     const today = new Date();
     today.setHours(0, 0, 0, 0);
+
     const deadlineGroups = {};
+    const contactOverdueCustomers = []; // Pelanggan dengan status OVERDUE
+    const serviceDateOverdueCustomers = []; // Pelanggan dengan jadwal terlewat
+
     data.forEach(customer => {
+      // Cek jadwal servis yang akan datang atau sudah terlewat
       if (customer.nextService && customer.status === 'UPCOMING') {
         const nextServiceDate = new Date(customer.nextService);
         nextServiceDate.setHours(0, 0, 0, 0);
         if (isNaN(nextServiceDate.getTime())) return;
+
         const timeDiff = nextServiceDate.getTime() - today.getTime();
         const daysDiff = Math.ceil(timeDiff / (1000 * 3600 * 24));
-        if (daysDiff >= 0 && daysDiff <= 3) {
+
+        if (daysDiff >= 0 && daysDiff <= 3) { // Pengingat jadwal akan datang
           if (!deadlineGroups[daysDiff]) {
             deadlineGroups[daysDiff] = [];
           }
           deadlineGroups[daysDiff].push(customer.name);
+        } else if (daysDiff < 0) { // Pengingat jadwal sudah terlewat
+          serviceDateOverdueCustomers.push(customer.name);
         }
       }
+
+      // Cek pelanggan yang kontak-nya ditandai terlambat
+      if (customer.status === 'OVERDUE') {
+        contactOverdueCustomers.push(customer.name);
+      }
     });
+
+    // Kirim notifikasi untuk jadwal mendatang
     for (const days in deadlineGroups) {
       const customerCount = deadlineGroups[days].length;
       if (customerCount === 0) continue;
@@ -226,6 +243,29 @@ async function checkUpcomingServices() {
         body: bodyMessage
       }).show();
     }
+
+    // Kirim notifikasi untuk JADWAL SERVIS yang terlewat
+    if (serviceDateOverdueCustomers.length > 0) {
+      const customerCount = serviceDateOverdueCustomers.length;
+      const bodyMessage = `Perhatian, ada ${customerCount} pelanggan yang JADWAL SERVISNYA TERLEWAT dan belum dihubungi.`;
+      console.log(`MENGIRIM NOTIFIKASI JADWAL TERLEWAT: ${bodyMessage}`);
+      new Notification({
+        title: 'Pengingat Jadwal Terlewat',
+        body: bodyMessage
+      }).show();
+    }
+
+    // Kirim notifikasi untuk KONTAK yang terlambat
+    if (contactOverdueCustomers.length > 0) {
+      const customerCount = contactOverdueCustomers.length;
+      const bodyMessage = `Perhatian, ada ${customerCount} pelanggan yang TERLAMBAT dihubungi. Segera tindak lanjuti.`;
+      console.log(`MENGIRIM NOTIFIKASI KONTAK TERLAMBAT: ${bodyMessage}`);
+      new Notification({
+        title: 'Pengingat Kontak Terlambat',
+        body: bodyMessage
+      }).show();
+    }
+
   } catch (error) {
     console.error('Gagal memeriksa jadwal untuk notifikasi:', error);
   }
@@ -350,8 +390,7 @@ ipcMain.handle('update-contact-status', async (event, { serviceID, newStatus, no
 
       const nextServiceDate = new Date();
       nextServiceDate.setMonth(nextServiceDate.getMonth() + 6);
-      const idSuffix = customerId.substring(5);
-      const nextServiceId = `SVC-${idSuffix}-R`;
+      const nextServiceId = await generateNewServiceId(nextServiceDate);
       await serviceSheet.addRow({
         ServiceID: nextServiceId,
         CustomerID: customerId,
@@ -496,7 +535,6 @@ ipcMain.handle('delete-customer', async (event, customerID) => {
   try {
     const { customerSheet, serviceSheet } = await getSheets();
 
-    // Fungsi helper untuk delete dengan retry
     const deleteWithRetry = async (row, maxRetries = 3) => {
       for (let attempt = 1; attempt <= maxRetries; attempt++) {
         try {
@@ -505,34 +543,21 @@ ipcMain.handle('delete-customer', async (event, customerID) => {
         } catch (error) {
           if (attempt === maxRetries) throw error;
           console.warn(`Attempt ${attempt} failed, retrying...`);
-          await new Promise(resolve => setTimeout(resolve, 1000 * attempt)); // Wait before retry
+          await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
         }
       }
     };
 
-    // Hapus services terlebih dahulu
     const serviceRows = await serviceSheet.getRows();
     const servicesToDelete = serviceRows.filter(r => r.get('CustomerID') === customerID);
-
-    console.log(`Menghapus ${servicesToDelete.length} service records untuk customer ${customerID}`);
-
     for (const serviceRow of servicesToDelete) {
-      try {
-        await deleteWithRetry(serviceRow);
-      } catch (error) {
-        console.error(`Gagal menghapus service: ${serviceRow.get('ServiceID')}`, error);
-      }
+      await deleteWithRetry(serviceRow);
     }
 
-    // Hapus customer
     const customerRows = await customerSheet.getRows();
     const customerToDelete = customerRows.find(r => r.get('CustomerID') === customerID);
-
     if (customerToDelete) {
       await deleteWithRetry(customerToDelete);
-      console.log(`Berhasil menghapus pelanggan: ${customerID}`);
-    } else {
-      console.warn(`Pelanggan ${customerID} tidak ditemukan di sheet customers`);
     }
 
     return { success: true };
@@ -560,30 +585,87 @@ ipcMain.handle('export-data', async () => {
       { name: 'CSV Files', extensions: ['csv'] },
     ]
   });
+
   if (saveDialogResult.canceled || !saveDialogResult.filePath) {
     return { success: false, error: 'Proses ekspor dibatalkan.' };
   }
+
   const fullPath = saveDialogResult.filePath;
   const parsedPath = path.parse(fullPath);
   const basePath = path.join(parsedPath.dir, parsedPath.name);
+
+  let tempFilePath = null;
+
   try {
     const dataFromSheets = await getFlatDataForExport();
     const dataString = JSON.stringify(dataFromSheets);
+
+    tempFilePath = path.join(os.tmpdir(), `export-data-${Date.now()}.json`);
+    fs.writeFileSync(tempFilePath, dataString, 'utf-8');
+
     const isPackaged = app.isPackaged;
-    const scriptResourcePath = isPackaged
+
+    const scriptName = 'export_data.py';
+    const executableName = process.platform === 'win32' ? 'export_data.exe' : 'export_data';
+
+    const scriptPath = isPackaged
       ? path.join(process.resourcesPath, 'scripts')
       : path.join(__dirname, '..', '..', 'scripts');
-    const options = {
-      mode: 'text',
-      pythonPath: 'python3',
-      scriptPath: scriptResourcePath,
-      args: [dataString, basePath]
-    };
-    await PythonShell.run('export_data.py', options);
+
+    let options;
+
+    if (isPackaged) {
+      const executablePath = path.join(scriptPath, executableName);
+      options = {
+        mode: 'text',
+        args: [tempFilePath, basePath]
+      };
+      await new Promise((resolve, reject) => {
+        const { spawn } = require('node:child_process');
+        const process = spawn(executablePath, options.args);
+        let stderr = '';
+
+        process.stdout.on('data', (data) => {
+          console.log(`stdout: ${data}`);
+        });
+
+        process.stderr.on('data', (data) => {
+          console.error(`stderr: ${data}`);
+          stderr += data.toString();
+        });
+
+        process.on('close', (code) => {
+          if (code !== 0) {
+            console.error(`Process exited with code ${code}`);
+            reject(new Error(stderr || `Proses ekspor gagal dengan kode: ${code}`));
+          } else {
+            resolve();
+          }
+        });
+      });
+
+    } else {
+      const pythonExecutable = process.platform === 'win32'
+        ? path.join(__dirname, '..', '..', 'venv', 'Scripts', 'python.exe')
+        : 'python3';
+
+      options = {
+        mode: 'text',
+        pythonPath: pythonExecutable,
+        scriptPath: scriptPath,
+        args: [tempFilePath, basePath]
+      };
+      await PythonShell.run(scriptName, options);
+    }
+
     return { success: true, path: `${basePath}.xlsx dan .csv` };
   } catch (err) {
     console.error('Gagal menjalankan proses ekspor:', err);
     return { success: false, error: err.message || 'Terjadi kesalahan tidak diketahui saat ekspor.' };
+  } finally {
+    if (tempFilePath && fs.existsSync(tempFilePath)) {
+      fs.unlinkSync(tempFilePath);
+    }
   }
 });
 
@@ -606,8 +688,15 @@ ipcMain.handle('import-data', async () => {
     const scriptResourcePath = isPackaged
       ? path.join(process.resourcesPath, 'scripts')
       : path.join(__dirname, '..', '..', 'scripts');
+
+    const pythonExecutable = process.platform === 'win32'
+      ? path.join(__dirname, '..', '..', 'venv', 'Scripts', 'python.exe')
+      : 'python3';
+
     const pyOptions = {
-      mode: 'text', pythonPath: 'python3', scriptPath: scriptResourcePath,
+      mode: 'text',
+      pythonPath: pythonExecutable,
+      scriptPath: scriptResourcePath,
       args: [inputFile, tempDir]
     };
     await PythonShell.run('import_data.py', pyOptions);
@@ -617,13 +706,19 @@ ipcMain.handle('import-data', async () => {
     await new Promise((resolve, reject) => fs.createReadStream(customersPath).pipe(csv()).on('data', (row) => customersToImport.push(row)).on('end', resolve).on('error', reject));
     await new Promise((resolve, reject) => fs.createReadStream(servicesPath).pipe(csv()).on('data', (row) => servicesToImport.push(row)).on('end', resolve).on('error', reject));
 
-    // --- OPTIMISASI DIMULAI DI SINI ---
-    // 1. Baca semua data yang ada SATU KALI saja
     const { customerSheet, serviceSheet } = await getSheets();
     const existingServRows = await serviceSheet.getRows();
-    let nextCustSequence = await getNextGlobalSequence(customerSheet); // Kirim sheet agar tidak perlu get lagi
+    const existingCustRows = await customerSheet.getRows();
 
-    // 2. Siapkan data urutan servis di memori
+    const existingCustomerIds = new Set(existingCustRows.map(r => r.get('CustomerID')));
+    let lastCustSeq = 0;
+    existingCustomerIds.forEach(id => {
+      if (id && id.startsWith('CUST-')) {
+        const seq = parseInt(id.slice(-5));
+        if (seq > lastCustSeq) lastCustSeq = seq;
+      }
+    });
+
     const latestServSequenceForDay = new Map();
     existingServRows.map(r => r.get('ServiceID')).forEach(id => {
       if (id && id.startsWith('SVC-')) {
@@ -636,21 +731,23 @@ ipcMain.handle('import-data', async () => {
       }
     });
 
-    // 3. Buat semua baris baru di memori tanpa memanggil API
-    const newCustomerRows = customersToImport.map(c => {
+    const newCustomerRows = [];
+    const customerMap = new Map();
+
+    customersToImport.forEach(c => {
+      lastCustSeq++;
       const purchaseDate = new Date(c.purchaseDate);
       const datePart = formatDateToYYYYMMDD(purchaseDate);
-      const sequencePart = String(nextCustSequence).padStart(5, '0');
+      const sequencePart = String(lastCustSeq).padStart(5, '0');
       const newId = `CUST-${datePart}${sequencePart}`;
-      nextCustSequence++;
-      return {
+      const newRow = {
         CustomerID: newId, Nama: c.name, Alamat: c.address,
         'No Telp': c.phone, Kota: c.kota, 'Pemasangan': c.purchaseDate,
       };
+      newCustomerRows.push(newRow);
+      customerMap.set(c.name, newId);
     });
 
-    const customerMap = new Map(newCustomerRows.map(c => [c.Nama, c.CustomerID]));
-    const latestServiceMap = new Map(customersToImport.map(c => [c.name, c.latest_service]));
     const allNewServiceRows = [];
 
     servicesToImport.forEach(s => {
@@ -659,7 +756,7 @@ ipcMain.handle('import-data', async () => {
       const serviceDate = new Date(s.serviceDate);
       const datePart = formatDateToYYYYMMDD(serviceDate);
       const nextSeq = (latestServSequenceForDay.get(datePart) || 0) + 1;
-      latestServSequenceForDay.set(datePart, nextSeq); // Update sequence di memori
+      latestServSequenceForDay.set(datePart, nextSeq);
       const serviceId = `SVC-${datePart}${String(nextSeq).padStart(5, '0')}`;
       allNewServiceRows.push({
         ServiceID: serviceId, CustomerID: customerId, ServiceDate: s.serviceDate,
@@ -667,6 +764,7 @@ ipcMain.handle('import-data', async () => {
       });
     });
 
+    const latestServiceMap = new Map(customersToImport.map(c => [c.name, c.latest_service]));
     customersToImport.forEach(c => {
       const customerId = customerMap.get(c.name);
       if (!customerId || !latestServiceMap.get(c.name)) return;
@@ -675,7 +773,7 @@ ipcMain.handle('import-data', async () => {
       const reminderDateString = lastServiceDate.toISOString().split('T')[0];
       const datePart = formatDateToYYYYMMDD(lastServiceDate);
       const nextSeq = (latestServSequenceForDay.get(datePart) || 0) + 1;
-      latestServSequenceForDay.set(datePart, nextSeq); // Update sequence di memori
+      latestServSequenceForDay.set(datePart, nextSeq);
       const serviceId = `SVC-${datePart}${String(nextSeq).padStart(5, '0')}`;
       allNewServiceRows.push({
         ServiceID: serviceId, CustomerID: customerId, ServiceDate: reminderDateString,
@@ -683,14 +781,12 @@ ipcMain.handle('import-data', async () => {
       });
     });
 
-    // 4. Unggah semua baris baru dalam DUA PANGGILAN API saja
     if (newCustomerRows.length > 0) {
       await customerSheet.addRows(newCustomerRows);
     }
     if (allNewServiceRows.length > 0) {
       await serviceSheet.addRows(allNewServiceRows);
     }
-    // --- AKHIR OPTIMISASI ---
 
     return { success: true, message: `Berhasil mengimpor ${customersToImport.length} pelanggan.` };
   } catch (error) {
@@ -701,3 +797,4 @@ ipcMain.handle('import-data', async () => {
     if (fs.existsSync(servicesPath)) fs.unlinkSync(servicesPath);
   }
 });
+
