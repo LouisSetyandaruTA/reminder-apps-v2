@@ -1,0 +1,525 @@
+<!DOCTYPE html>
+<html lang="id">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Solahart Services Reminder</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        /* Menambahkan style untuk tombol yang nonaktif agar lebih jelas */
+        button:disabled {
+            background-color: #9ca3af;
+            /* gray-400 */
+            cursor: not-allowed;
+        }
+
+        /* Menambahkan garis vertikal sebagai pemisah antar data untuk tampilan daftar */
+        .data-separator::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 50%;
+            transform: translateY(-50%);
+            height: 70%;
+            width: 1px;
+            background-color: #e5e7eb;
+            /* gray-200 */
+        }
+    </style>
+</head>
+
+<body class="bg-gray-50">
+
+    <div id="app-container" class="min-h-screen p-6">
+        <div class="max-w-full mx-auto">
+            <div class="bg-white rounded-lg shadow-sm p-6 mb-6">
+                <div class="flex items-center justify-between mb-6">
+                    <h1 class="text-base italic text-2xl font-bold text-blue-600 flex items-center">
+                        <img src="./assets/Logo_SH.png" alt="Logo Pengingat" class="mr-10 h-8 w-35" />
+                    </h1>
+                    <div class="flex gap-3">
+                        <button id="add-customer-btn"
+                            class="flex items-center px-4 py-2 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700">
+                            <i data-lucide="plus" class="h-4 w-4 mr-2"></i> Tambah Pelanggan
+                        </button>
+                        <button id="import-data-btn"
+                            class="flex items-center px-4 py-2 text-sm bg-yellow-600 text-white rounded-lg hover:bg-yellow-700">
+                            <i data-lucide="upload" class="h-4 w-4 mr-2"></i> Impor Data
+                        </button>
+                        <button id="export-data-btn"
+                            class="flex items-center px-4 py-2 text-sm bg-purple-600 text-white rounded-lg hover:bg-purple-700">
+                            <i data-lucide="download" class="h-4 w-4 mr-2"></i> Ekspor Data
+                        </button>
+                        <button id="refresh-btn"
+                            class="flex items-center px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+                            <i data-lucide="bell" class="h-4 w-4 mr-2"></i> Segarkan
+                        </button>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 mb-6">
+                    <div class="bg-blue-100 p-4 rounded-lg text-center border border-blue-200">
+                        <p class="text-blue-700 text-sm font-medium">Total Pelanggan</p>
+                        <p id="stats-total" class="text-2xl font-bold text-blue-900">0</p>
+                    </div>
+                    <div class="bg-red-100 p-4 rounded-lg text-center border border-red-200">
+                        <p class="text-red-700 text-sm font-medium">Layanan Terlambat</p>
+                        <p id="stats-overdue" class="text-2xl font-bold text-red-900">0</p>
+                    </div>
+                    <div class="bg-yellow-100 p-4 rounded-lg text-center border border-yellow-200">
+                        <p class="text-yellow-700 text-sm font-medium">Jatuh Tempo Bulan Ini</p>
+                        <p id="stats-due-month" class="text-2xl font-bold text-yellow-900">0</p>
+                    </div>
+                    <div class="bg-green-100 p-4 rounded-lg text-center border border-green-200">
+                        <p class="text-green-700 text-sm font-medium">Sudah Dihubungi</p>
+                        <p id="stats-contacted" class="text-2xl font-bold text-green-900">0</p>
+                    </div>
+                    <div class="bg-gray-200 p-4 rounded-lg text-center border border-gray-300">
+                        <p class="text-gray-700 text-sm font-medium">Belum Dihubungi</p>
+                        <p id="stats-not-contacted" class="text-2xl font-bold text-gray-900">0</p>
+                    </div>
+                    <div class="bg-gray-200 p-4 rounded-lg text-center border border-gray-300">
+                        <p class="text-gray-700 text-sm font-medium">Tidak bisa dihubungi</p>
+                        <p id="stats-contact-overdue" class="text-2xl font-bold text-gray-900">0</p>
+                    </div>
+                </div>
+
+                <div class="flex flex-wrap gap-4 items-center border border-gray-200 rounded-lg p-3 mt-6">
+                    <div class="flex items-center flex-grow relative">
+                        <i data-lucide="search" class="text-gray-400 ml-2 h-5 w-5 absolute"></i>
+                        <input id="search-input" type="text" placeholder="Cari pelanggan..."
+                            class="border-gray-300 rounded-lg px-3 py-2 pl-10 w-full focus:ring-blue-500 focus:border-blue-500">
+                    </div>
+                    <div class="flex items-center">
+                        <i data-lucide="map-pin" class="text-gray-400 mr-2 h-5 w-5"></i>
+                        <select id="city-filter-select" class="border-gray-300 rounded-lg px-3 py-2">
+                            <option value="all">Semua Kota</option>
+                        </select>
+                    </div>
+                    <div class="flex items-center">
+                        <i data-lucide="filter" class="text-gray-400 mr-2 h-5 w-5"></i>
+                        <select id="filter-select" class="border-gray-300 rounded-lg px-3 py-2">
+                            <option value="all">Semua Pelanggan</option>
+                            <option value="overdue">Layanan Terlambat</option>
+                            <option value="upcoming">Jatuh Tempo Bulan Ini</option>
+                            <option value="contacted">Sudah Dihubungi</option>
+                            <option value="not_contacted">Belum Dihubungi</option>
+                            <option value="contact_overdue">Kontak Terlambat</option>
+                        </select>
+                    </div>
+                    <!-- View Switcher -->
+                    <div class="flex items-center">
+                        <span class="text-sm font-medium text-gray-700 mr-2">Tampilan:</span>
+                        <div class="flex rounded-md shadow-sm">
+                            <button id="view-bubble-btn" type="button"
+                                class="relative inline-flex items-center px-3 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 focus:z-10 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500">
+                                <i data-lucide="layout-grid" class="h-5 w-5"></i>
+                            </button>
+                            <button id="view-list-btn" type="button"
+                                class="-ml-px relative inline-flex items-center px-3 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 focus:z-10 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500">
+                                <i data-lucide="list" class="h-5 w-5"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Container ini akan diubah kelasnya oleh JavaScript -->
+            <div id="customer-list"></div>
+
+            <div id="empty-state" class="text-center py-12 hidden">
+                <i data-lucide="users" class="mx-auto text-gray-400 mb-4 h-12 w-12"></i>
+                <p class="text-gray-600">Tidak ada pelanggan yang cocok dengan filter saat ini.</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Loading and Error Indicators -->
+    <div id="loading-indicator" class="fixed inset-0 bg-gray-50 flex items-center justify-center z-50">
+        <div class="text-center">
+            <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+            <p class="text-gray-600">Memuat data pelanggan...</p>
+        </div>
+    </div>
+    <div id="error-indicator" class="fixed inset-0 bg-gray-50 flex items-center justify-center z-50 hidden">
+        <div class="text-center bg-white p-8 rounded-lg shadow-sm">
+            <i data-lucide="alert-circle" class="text-red-600 mx-auto mb-4 h-12 w-12"></i>
+            <h2 class="text-xl font-semibold text-gray-900 mb-2">Terjadi Kesalahan saat Memuat Data</h2>
+            <p id="error-message" class="text-gray-600 mb-4"></p>
+            <button id="retry-btn" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700">
+                Coba Lagi
+            </button>
+        </div>
+    </div>
+
+    <!-- Modals Container -->
+    <div id="modals-container">
+        <!-- Update Service Modal -->
+        <div id="update-service-modal"
+            class="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-[51] hidden">
+            <div class="bg-white p-6 rounded-lg shadow-xl w-full max-w-md">
+                <form onsubmit="return false;">
+                    <div class="flex justify-between items-center mb-4">
+                        <h2 class="text-xl font-bold">Perbarui Layanan</h2>
+                        <button data-action="close" type="button" class="p-1 hover:bg-gray-200 rounded-full"><i
+                                data-lucide="x" class="h-5 w-5"></i></button>
+                    </div>
+                    <div class="space-y-4">
+                        <div>
+                            <p class="text-sm text-gray-600">Pelanggan:</p>
+                            <h3 id="service-modal-customer-name" class="text-lg font-medium">Nama Pelanggan</h3>
+                        </div>
+                        <div>
+                            <label for="service-modal-date" class="block text-sm font-medium text-gray-700">Tanggal
+                                Layanan Berikutnya</label>
+                            <input id="service-modal-date" type="date"
+                                class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                        </div>
+                        <div>
+                            <label for="service-modal-handler"
+                                class="block text-sm font-medium text-gray-700">Teknisi</label>
+                            <input id="service-modal-handler" type="text"
+                                class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                                placeholder="Masukkan nama teknisi">
+                        </div>
+                    </div>
+                    <div class="flex justify-end gap-3 mt-6">
+                        <button data-action="close" type="button"
+                            class="px-4 py-2 bg-gray-300 rounded-md hover:bg-gray-400">Batal</button>
+                        <button id="service-modal-save" type="submit"
+                            class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 flex items-center">
+                            <i data-lucide="save" class="h-4 w-4 mr-2"></i> Simpan
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Update Contact Modal -->
+        <div id="update-contact-modal"
+            class="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-[51] hidden">
+            <div class="bg-white p-6 rounded-lg shadow-xl w-full max-w-md">
+                <form onsubmit="return false;">
+                    <div class="flex justify-between items-center mb-4">
+                        <h2 class="text-xl font-bold">Perbarui Status Kontak</h2>
+                        <button data-action="close" type="button" class="p-1 hover:bg-gray-200 rounded-full"><i
+                                data-lucide="x" class="h-5 w-5"></i></button>
+                    </div>
+                    <div class="space-y-4">
+                        <div>
+                            <h3 id="contact-modal-name" class="text-lg font-medium"></h3>
+                            <p id="contact-modal-phone" class="text-sm text-gray-600"></p>
+                        </div>
+                        <div>
+                            <label for="contact-modal-status" class="block text-sm font-medium text-gray-700">Status
+                                Kontak</label>
+                            <select id="contact-modal-status"
+                                class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                                <option value="not_contacted">Belum Dihubungi</option>
+                                <option value="contacted">Sudah Dihubungi</option>
+                                <option value="overdue">Terlambat (Tidak Ada Respon)</option>
+                                <option value="postponed">Ditunda</option>
+                                <option value="refused">Tidak Mau Servis Lagi</option>
+                            </select>
+                        </div>
+                        <div id="postpone-duration-container" class="hidden">
+                            <label for="contact-modal-postpone-duration"
+                                class="block text-sm font-medium text-gray-700">Tunda Selama</label>
+                            <select id="contact-modal-postpone-duration"
+                                class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                                <option value="1w">1 Minggu</option>
+                                <option value="1m">1 Bulan</option>
+                                <option value="3m">3 Bulan</option>
+                                <option value="6m">6 Bulan</option>
+                            </select>
+                        </div>
+                        <div id="refusal-follow-up-container" class="hidden">
+                            <label for="contact-modal-refusal-follow-up"
+                                class="block text-sm font-medium text-gray-700">Tindak Lanjut</label>
+                            <select id="contact-modal-refusal-follow-up"
+                                class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                                <option value="1y">Hubungi dalam 1 Tahun</option>
+                                <option value="2y">Hubungi dalam 2 Tahun</option>
+                                <option value="never">Jangan Dihubungi Lagi</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label for="contact-modal-notes"
+                                class="block text-sm font-medium text-gray-700">Catatan</label>
+                            <textarea id="contact-modal-notes" placeholder="Tambahkan catatan kontak..."
+                                class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                                rows="3"></textarea>
+                        </div>
+                    </div>
+                    <div class="flex justify-end gap-3 mt-6">
+                        <button data-action="close" type="button"
+                            class="px-4 py-2 bg-gray-300 rounded-md hover:bg-gray-400">Batal</button>
+                        <button id="contact-modal-save" type="submit"
+                            class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 flex items-center">
+                            <i data-lucide="save" class="h-4 w-4 mr-2"></i> Perbarui
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Add Customer Modal -->
+        <div id="add-customer-modal"
+            class="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-[51] hidden">
+            <div class="bg-white p-6 rounded-lg shadow-xl w-full max-w-md">
+                <form onsubmit="return false;">
+                    <div class="flex justify-between items-center mb-4">
+                        <h2 class="text-xl font-bold">Tambah Pelanggan Baru</h2>
+                        <button data-action="close" type="button" class="p-1 hover:bg-gray-200 rounded-full"><i
+                                data-lucide="x" class="h-5 w-5"></i></button>
+                    </div>
+                    <div class="space-y-4">
+                        <div>
+                            <label for="add-modal-name" class="block text-sm font-medium text-gray-700">Nama
+                                Pelanggan</label>
+                            <input id="add-modal-name" type="text"
+                                class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                                placeholder="Masukkan nama pelanggan">
+                        </div>
+                        <div>
+                            <label for="add-modal-phone" class="block text-sm font-medium text-gray-700">Nomor
+                                Telepon</label>
+                            <input id="add-modal-phone" type="text"
+                                class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                                placeholder="Masukkan nomor telepon">
+                        </div>
+                        <div>
+                            <label for="add-modal-address"
+                                class="block text-sm font-medium text-gray-700">Alamat</label>
+                            <textarea id="add-modal-address"
+                                class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                                rows="2" placeholder="Masukkan alamat"></textarea>
+                        </div>
+                        <div>
+                            <label for="add-modal-kota" class="block text-sm font-medium text-gray-700">Kota</label>
+                            <input id="add-modal-kota" type="text"
+                                class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                                placeholder="Masukkan kota asal">
+                        </div>
+                        <div>
+                            <label for="add-modal-customer-notes"
+                                class="block text-sm font-medium text-gray-700">Catatan Pelanggan</label>
+                            <textarea id="add-modal-customer-notes"
+                                class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                                rows="2" placeholder="Catatan umum tentang pelanggan..."></textarea>
+                        </div>
+                        <div>
+                            <label for="add-modal-nextService" class="block text-sm font-medium text-gray-700">Tanggal
+                                Pemasangan</label>
+                            <input id="add-modal-nextService" type="date"
+                                class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                        </div>
+                        <div>
+                            <label for="add-modal-handler"
+                                class="block text-sm font-medium text-gray-700">Teknisi</label>
+                            <input id="add-modal-handler" type="text"
+                                class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                                placeholder="Masukkan nama teknisi">
+                        </div>
+                    </div>
+                    <div class="flex justify-end gap-3 mt-6">
+                        <button data-action="close" type="button"
+                            class="px-4 py-2 bg-gray-300 rounded-md hover:bg-gray-400">Batal</button>
+                        <button id="add-modal-save" type="submit"
+                            class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 flex items-center">
+                            <i data-lucide="plus" class="h-4 w-4 mr-2"></i> Tambah Pelanggan
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Update Customer Modal -->
+        <div id="update-customer-modal"
+            class="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-[51] hidden">
+            <div class="bg-white p-6 rounded-lg shadow-xl w-full max-w-md">
+                <form onsubmit="return false;">
+                    <div class="flex justify-between items-center mb-4">
+                        <h2 class="text-xl font-bold">Edit Pelanggan</h2>
+                        <button data-action="close" type="button" class="p-1 hover:bg-gray-200 rounded-full"><i
+                                data-lucide="x" class="h-5 w-5"></i></button>
+                    </div>
+                    <div class="space-y-4">
+                        <div>
+                            <label for="update-modal-name" class="block text-sm font-medium text-gray-700">Nama
+                                Pelanggan</label>
+                            <input id="update-modal-name" type="text"
+                                class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                                placeholder="Masukkan nama pelanggan">
+                        </div>
+                        <div>
+                            <label for="update-modal-phone" class="block text-sm font-medium text-gray-700">Nomor
+                                Telepon</label>
+                            <input id="update-modal-phone" type="text"
+                                class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                                placeholder="Masukkan nomor telepon">
+                        </div>
+                        <div>
+                            <label for="update-modal-address"
+                                class="block text-sm font-medium text-gray-700">Alamat</label>
+                            <textarea id="update-modal-address"
+                                class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                                rows="2" placeholder="Masukkan alamat"></textarea>
+                        </div>
+                        <div>
+                            <label for="update-modal-kota" class="block text-sm font-medium text-gray-700">Kota</label>
+                            <input id="update-modal-kota" type="text"
+                                class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                                placeholder="Masukkan kota">
+                        </div>
+                        <div>
+                            <label for="update-modal-customer-notes"
+                                class="block text-sm font-medium text-gray-700">Catatan Pelanggan</label>
+                            <textarea id="update-modal-customer-notes"
+                                class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                                rows="2" placeholder="Catatan umum tentang pelanggan..."></textarea>
+                        </div>
+                    </div>
+                    <div class="flex justify-end gap-3 mt-6">
+                        <button data-action="close" type="button"
+                            class="px-4 py-2 bg-gray-300 rounded-md hover:bg-gray-400">Batal</button>
+                        <button id="update-modal-save" type="submit"
+                            class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 flex items-center">
+                            <i data-lucide="save" class="h-4 w-4 mr-2"></i> Simpan Perubahan
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Update History Note Modal -->
+        <div id="update-history-note-modal"
+            class="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-[52] hidden">
+            <div class="bg-white p-6 rounded-lg shadow-xl w-full max-w-md">
+                <form onsubmit="return false;">
+                    <div class="flex justify-between items-center mb-4">
+                        <h2 class="text-xl font-bold">Update Catatan Riwayat</h2>
+                        <button data-action="close" type="button" class="p-1 hover:bg-gray-200 rounded-full"><i
+                                data-lucide="x" class="h-5 w-5"></i></button>
+                    </div>
+                    <p id="history-note-modal-info" class="text-sm text-gray-600 mb-4">Mengubah catatan untuk...</p>
+                    <div class="space-y-4">
+                        <div>
+                            <label for="history-note-modal-handler"
+                                class="block text-sm font-medium text-gray-700">Teknisi</label>
+                            <input type="text" id="history-note-modal-handler"
+                                class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                        </div>
+                        <div>
+                            <label for="history-note-modal-notes"
+                                class="block text-sm font-medium text-gray-700">Keterangan</label>
+                            <textarea id="history-note-modal-notes" rows="4"
+                                class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500"></textarea>
+                        </div>
+                    </div>
+                    <div class="mt-6 flex justify-end gap-3">
+                        <button data-action="close" type="button"
+                            class="px-4 py-2 bg-gray-300 rounded-md hover:bg-gray-400">Batal</button>
+                        <button id="history-note-modal-save" type="submit"
+                            class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">
+                            Simpan Perubahan
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Customer Detail Modal -->
+        <div id="customer-detail-modal"
+            class="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-[50] p-4 hidden">
+            <div class="bg-white rounded-lg shadow-xl w-full max-w-2xl flex flex-col max-h-full">
+                <!-- Modal Header -->
+                <div class="flex-shrink-0 p-6 pb-4 flex justify-between items-center border-b">
+                    <h2 id="detail-modal-name" class="text-xl font-bold"></h2>
+                    <button data-action="close" type="button" class="p-1 hover:bg-gray-200 rounded-full"><i
+                            data-lucide="x" class="h-5 w-5"></i></button>
+                </div>
+
+                <!-- Scrollable Modal Body -->
+                <div class="flex-grow overflow-y-auto p-6">
+                    <div class="space-y-4">
+                        <div class="flex items-center gap-2">
+                            <span id="detail-modal-priority"
+                                class="px-2 py-0.5 rounded-full text-xs font-medium"></span>
+                            <span id="detail-modal-status"
+                                class="px-2 py-0.5 rounded-full text-xs font-medium border flex items-center">
+                                <i id="detail-modal-status-icon" data-lucide="clock" class="w-3.5 h-3.5"></i>
+                                <span id="detail-modal-status-text" class="ml-1.5"></span>
+                            </span>
+                        </div>
+                        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 text-sm">
+                            <div>
+                                <p class="text-gray-500">Pengingat Berikutnya</p>
+                                <p id="detail-modal-next-service-date" class="font-semibold text-gray-800"></p>
+                                <p id="detail-modal-days-until" class="text-blue-600"></p>
+                            </div>
+                            <div>
+                                <p class="text-gray-500">Alamat</p>
+                                <p id="detail-modal-address" class="font-semibold text-gray-800"></p>
+                            </div>
+                            <div>
+                                <p class="text-gray-500">Kota</p>
+                                <p id="detail-modal-kota" class="font-semibold text-gray-800"></p>
+                            </div>
+                            <div>
+                                <p class="text-gray-500">Nomor Telepon</p>
+                                <p id="detail-modal-phone" class="font-semibold text-gray-800"></p>
+                            </div>
+                            <div>
+                                <p class="text-gray-500">Servis Terakhir</p>
+                                <p id="detail-modal-last-service" class="font-semibold text-gray-800"></p>
+                            </div>
+                            <div>
+                                <p class="text-gray-500">Teknisi</p>
+                                <p id="detail-modal-handler" class="font-semibold text-gray-800"></p>
+                            </div>
+                            <div class="col-span-1 md:col-span-2 lg:col-span-3">
+                                <p class="text-gray-500">Keterangan</p>
+                                <p id="detail-modal-notes" class="font-semibold text-gray-800"></p>
+                            </div>
+                        </div>
+                        <div class="mt-4">
+                            <h3 class="text-base font-bold text-gray-900 mb-2">Riwayat Servis</h3>
+                            <div id="detail-modal-history"
+                                class="text-xs bg-gray-50 p-2 rounded border overflow-x-auto">
+                                Tidak ada riwayat servis yang selesai.
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Modal Footer -->
+                <div class="flex-shrink-0 p-6 pt-4 flex flex-wrap justify-end gap-2 border-t">
+                    <button data-action="call" id="detail-modal-call"
+                        class="px-3 py-2 text-sm rounded-md flex items-center justify-center whitespace-nowrap bg-green-100 text-green-800 hover:bg-green-200 transition-colors"><i
+                            data-lucide="message-circle" class="w-4 h-4 mr-2"></i> Kontak</button>
+                    <button data-action="update-contact" id="detail-modal-update-contact"
+                        class="px-3 py-2 text-sm rounded-md flex items-center justify-center whitespace-nowrap bg-purple-100 text-purple-800 hover:bg-purple-200 transition-colors"><i
+                            data-lucide="user-check" class="w-4 h-4 mr-2"></i> Kontak Update</button>
+                    <button data-action="update-service" id="detail-modal-update-service"
+                        class="px-3 py-2 text-sm rounded-md flex items-center justify-center whitespace-nowrap bg-blue-100 text-blue-800 hover:bg-blue-200 transition-colors"><i
+                            data-lucide="settings" class="w-4 h-4 mr-2"></i> Servis Update</button>
+                    <button data-action="edit-customer" id="detail-modal-edit"
+                        class="px-3 py-2 text-sm rounded-md flex items-center justify-center whitespace-nowrap bg-gray-200 text-gray-800 hover:bg-gray-300 transition-colors"><i
+                            data-lucide="edit-3" class="w-4 h-4 mr-2"></i> Edit</button>
+                    <button data-action="delete-customer" id="detail-modal-delete"
+                        class="px-3 py-2 text-sm rounded-md flex items-center justify-center whitespace-nowrap bg-red-200 text-red-800 hover:bg-red-300 transition-colors"><i
+                            data-lucide="trash-2" class="w-4 h-4 mr-2"></i> Hapus</button>
+                    <button data-action="close"
+                        class="px-4 py-2 bg-gray-300 rounded-md hover:bg-gray-400">Tutup</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script type="module" src="./src/reminder.js"></script>
+</body>
+
+</html>

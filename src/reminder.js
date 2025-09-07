@@ -6,7 +6,9 @@ document.addEventListener('DOMContentLoaded', () => {
     let filterBy = 'all';
     let filterByCity = 'all';
     let searchTerm = '';
-    let currentView = 'bubble'; // 'bubble' or 'list'
+    let currentView = 'bubble';
+    let activeSheetId = null;
+    let activeSheetName = '';
 
     // --- Element Caching ---
     const customerListContainer = document.getElementById('customer-list');
@@ -33,6 +35,14 @@ document.addEventListener('DOMContentLoaded', () => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
+    window.electronAPI.onLoadSheet(({ id, name }) => {
+        console.log(`Memuat data untuk: ${name} (${id})`);
+        activeSheetId = id;
+        activeSheetName = name;
+        document.title = `Reminder - ${name}`;
+        initializeApp(); // Panggil fungsi utama setelah ID didapat
+    });
+
     // --- UI Helper Functions ---
     const showWarning = (inputElement, message) => {
         hideWarning(inputElement);
@@ -56,7 +66,7 @@ document.addEventListener('DOMContentLoaded', () => {
         inputs.forEach(input => {
             hideWarning(input);
             if (!input.value.trim() && input.id !== 'add-modal-customer-notes' && input.id !== 'update-modal-customer-notes') { // Make notes optional
-                 isAllValid = false;
+                isAllValid = false;
             }
             if (input.id.includes('phone') && input.value.trim() && !/^\d+$/.test(input.value.trim())) {
                 isAllValid = false;
@@ -266,7 +276,7 @@ document.addEventListener('DOMContentLoaded', () => {
         } else {
             customerListContainer.className = 'flex flex-col gap-4';
         }
-        
+
         const sortedAndFilteredCustomers = customers
             .filter(customer => {
                 if (!customer || !customer.name) return false;
@@ -408,14 +418,13 @@ document.addEventListener('DOMContentLoaded', () => {
     async function handleApiCall(apiFunction, data, successMessage, errorMessagePrefix) {
         showLoading();
         try {
-            const result = await (window.electronAPI ? apiFunction(data) : Promise.resolve({ success: true }));
+            // Panggil fungsi API dengan activeSheetId. 'data' bisa berupa objek atau null
+            const result = await apiFunction(activeSheetId, data);
             if (result.success) {
                 if (successMessage) alert(successMessage);
-                await initializeApp({ keepFilters: true });
-                const openModals = document.querySelectorAll('#modals-container .fixed:not(.hidden)');
-                openModals.forEach(closeModal);
+                initializeApp(); // Muat ulang data untuk sheet yang sama
             } else {
-                throw new Error(result.error || 'Terjadi kesalahan tidak diketahui.');
+                throw new Error(result.error);
             }
         } catch (err) {
             console.error('API Call Error:', err);
@@ -452,7 +461,7 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('add-customer-btn').addEventListener('click', setupAndOpenAddCustomerModal);
         document.getElementById('refresh-btn').addEventListener('click', () => initializeApp());
         document.getElementById('retry-btn').addEventListener('click', () => initializeApp());
-        
+
         if (!window.electronAPI) {
             console.warn("Electron API not found. Using mock data and functions.");
             window.electronAPI = {
@@ -531,8 +540,8 @@ document.addEventListener('DOMContentLoaded', () => {
             const button = e.target.closest('button[data-action]');
             if (!button) return;
             const action = button.dataset.action;
-             if(action !== 'close') {
-               closeModal(customerDetailModal);
+            if (action !== 'close') {
+                closeModal(customerDetailModal);
             }
             switch (action) {
                 case 'call': window.electronAPI.openWhatsApp(button.dataset.phone); break;
@@ -547,7 +556,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 case 'close': closeModal(customerDetailModal); break;
             }
         });
-        
+
         document.querySelector('#detail-modal-history').addEventListener('click', (e) => {
             const button = e.target.closest('button[data-action="edit-note"]');
             if (button) {
@@ -555,7 +564,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 setupAndOpenHistoryNoteModal(button.dataset);
             }
         });
-        
+
         modals.forEach(modal => {
             modal.addEventListener('click', (e) => {
                 if (e.target.closest('[data-action="close"]')) closeModal(modal);
@@ -605,11 +614,14 @@ document.addEventListener('DOMContentLoaded', () => {
         customerListContainer.innerHTML = '';
         emptyState.classList.add('hidden');
 
+        if (!activeSheetId) return;
+        showLoading();
+
         try {
             const result = await window.electronAPI.refreshData();
             if (result.success) {
                 customers = result.data || [];
-                if(!keepFilters) {
+                if (!keepFilters) {
                     populateCityFilter(customers);
                 }
                 renderCustomers();

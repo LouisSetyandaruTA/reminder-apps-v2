@@ -12,7 +12,29 @@ import os from 'os';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const SPREADSHEET_ID = '1x4AmlaQGgdqHLEHKo_jZlGvyq9XsHigz6r6qGHFll0o';
+const dbPath = path.join(app.getPath('userData'), 'databases.json');
+
+// --- PENGELOLAAN DATABASE (JSON) ---
+function readDatabases() {
+  try {
+    if (fs.existsSync(dbPath)) {
+      return JSON.parse(fs.readFileSync(dbPath, 'utf-8'));
+    }
+    return [];
+  } catch (error) {
+    console.error('Gagal membaca file database:', error);
+    return [];
+  }
+}
+
+function writeDatabases(databases) {
+  const dir = path.dirname(dbPath);
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+  }
+  fs.writeFileSync(dbPath, JSON.stringify(databases, null, 2), 'utf-8');
+}
+// const SPREADSHEET_ID = '1x4AmlaQGgdqHLEHKo_jZlGvyq9XsHigz6r6qGHFll0o';
 
 // --- Helper Functions ---
 
@@ -41,7 +63,6 @@ async function getSheets() {
 }
 
 // --- ID Generator Functions ---
-
 async function getNextGlobalSequence() {
   const { customerSheet } = await getSheets();
   const rows = await customerSheet.getRows();
@@ -77,7 +98,6 @@ async function generateNewServiceId(serviceDate) {
 }
 
 // --- Data Fetching Functions ---
-
 async function getDataFromSheets() {
   const { customerSheet, serviceSheet } = await getSheets();
   const customerRows = await customerSheet.getRows();
@@ -272,24 +292,67 @@ async function checkUpcomingServices() {
 }
 
 // --- Main Window & App Lifecycle ---
-
 const createWindow = () => {
   const mainWindow = new BrowserWindow({
     width: 1200, height: 800,
-    webPreferences: { preload: path.join(__dirname, 'preload.js') },
+    webPreferences: { preload: path.join(__dirname, './src/preload.js') },
   });
-  if (MAIN_WINDOW_VITE_DEV_SERVER_URL) {
-    mainWindow.loadURL(MAIN_WINDOW_VITE_DEV_SERVER_URL);
+
+  // Pastikan variabel ini didefinisikan atau gunakan nilai default
+  const isDev = process.env.NODE_ENV === 'development';
+  if (isDev && process.env.VITE_DEV_SERVER_URL) {
+    mainWindow.loadURL(process.env.VITE_DEV_SERVER_URL);
   } else {
-    mainWindow.loadFile(path.join(__dirname, `../renderer/${MAIN_WINDOW_VITE_NAME}/index.html`));
+    mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
   }
-  if (!app.isPackaged) mainWindow.webContents.openDevTools();
+
+  if (isDev) mainWindow.webContents.openDevTools();
+};
+
+// TAMBAHKAN FUNGSI INI - INI YANG HILANG
+const createReminderWindow = (sheetId, sheetName) => {
+  const reminderWindow = new BrowserWindow({
+    width: 1400,
+    height: 900,
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      nodeIntegration: false,
+      contextIsolation: true
+    },
+    title: `Reminder - ${sheetName}`
+  });
+
+  // Load reminder.html (tampilan database)
+  const isDev = process.env.NODE_ENV === 'development';
+
+  if (isDev && process.env.VITE_DEV_SERVER_URL) {
+    // Mode development dengan Vite server
+    reminderWindow.loadURL(`${process.env.VITE_DEV_SERVER_URL}/reminder.html`);
+    console.log('Development mode: Loading reminder from Vite server');
+  } else {
+    // Mode production - load dari file
+    const reminderHtmlPath = path.join(__dirname, '..', 'reminder.html');
+    console.log('Production mode: Loading reminder from', reminderHtmlPath);
+    reminderWindow.loadFile(reminderHtmlPath).catch(err => {
+      console.error('Failed to load reminder HTML:', err);
+    });
+  }
+
+  // Kirim data sheet ke window reminder saat sudah siap
+  reminderWindow.webContents.once('did-finish-load', () => {
+    reminderWindow.webContents.send('load-sheet', { id: sheetId, name: sheetName });
+    console.log('Sent sheet data to reminder window:', { id: sheetId, name: sheetName });
+  });
+
+  if (isDev) {
+    reminderWindow.webContents.openDevTools();
+  }
 };
 
 app.whenReady().then(() => {
   createWindow();
   checkUpcomingServices();
-  setInterval(checkUpcomingServices, 3600 * 1000); // Check every hour
+  setInterval(checkUpcomingServices, 3600 * 1000);
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
@@ -300,6 +363,25 @@ app.on('window-all-closed', () => {
 });
 
 // --- IPC Handlers ---
+ipcMain.handle('get-databases', () => readDatabases());
+
+ipcMain.handle('add-database', (event, { name, id }) => {
+  const dbs = readDatabases();
+  dbs.push({ name, id });
+  writeDatabases(dbs);
+  return { success: true };
+});
+
+ipcMain.handle('delete-database', (event, id) => {
+  let dbs = readDatabases();
+  dbs = dbs.filter(db => db.id !== id);
+  writeDatabases(dbs);
+  return { success: true };
+});
+
+ipcMain.on('open-reminder-for-sheet', (event, { id, name }) => {
+  createReminderWindow(id, name);
+});
 
 ipcMain.handle('refresh-data', async () => {
   try {
