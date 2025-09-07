@@ -18,22 +18,22 @@ document.addEventListener('DOMContentLoaded', () => {
 
         databases.forEach(db => {
             const card = document.createElement('div');
-            card.className = 'db-card bg-white p-6 rounded-lg shadow-md cursor-pointer relative';
+            card.className = 'db-card bg-white p-6 rounded-lg shadow-md relative';
             card.innerHTML = `
-                <div class="flex items-center gap-4">
+                <div class="flex items-center gap-4 cursor-pointer">
                     <div class="bg-blue-100 p-3 rounded-full"><i data-lucide="database" class="h-6 w-6 text-blue-600"></i></div>
                     <div>
                         <h3 class="text-lg font-bold text-gray-800">${db.name}</h3>
-                        <p class="text-xs text-gray-500 truncate">${db.id}</p>
+                        <p class="text-xs text-gray-500 break-all">${db.id}</p>
                     </div>
                 </div>
-                <button data-id="${db.id}" class="delete-btn absolute top-3 right-3 p-1 bg-red-100 text-red-600 rounded-full hover:bg-red-200"><i data-lucide="trash-2" class="h-4 w-4"></i></button>
+                <button data-id="${db.id}" class="delete-btn absolute top-3 right-3 p-1 bg-red-100 text-red-600 rounded-full hover:bg-red-200"><i data-lucide="trash-2" class="h-4 w-4 pointer-events-none"></i></button>
             `;
-            dbListContainer.appendChild(card);
             // Event listener untuk membuka jendela reminder
             card.querySelector('.flex').addEventListener('click', () => {
                 window.electronAPI.openReminderForSheet({ id: db.id, name: db.name });
             });
+            dbListContainer.appendChild(card);
         });
         lucide.createIcons();
     }
@@ -59,7 +59,16 @@ document.addEventListener('DOMContentLoaded', () => {
     addDbForm.addEventListener('submit', async (e) => {
         e.preventDefault();
         const name = dbNameInput.value;
-        const id = dbIdInput.value;
+        const rawInput = dbIdInput.value.trim();
+
+        // Fungsi untuk mengekstrak ID dari URL Google Sheet
+        const extractSheetId = (input) => {
+            const match = input.match(/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
+            return match ? match[1] : input;
+        };
+
+        const id = extractSheetId(rawInput);
+
         if (name && id) {
             await window.electronAPI.addDatabase({ name, id });
             addDbForm.reset();

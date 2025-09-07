@@ -36,11 +36,10 @@ document.addEventListener('DOMContentLoaded', () => {
     today.setHours(0, 0, 0, 0);
 
     window.electronAPI.onLoadSheet(({ id, name }) => {
-        console.log(`Memuat data untuk: ${name} (${id})`);
         activeSheetId = id;
         activeSheetName = name;
         document.title = `Reminder - ${name}`;
-        initializeApp(); // Panggil fungsi utama setelah ID didapat
+        initializeApp();
     });
 
     // --- UI Helper Functions ---
@@ -65,7 +64,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const inputs = modalElement.querySelectorAll('input[id]:not([type=hidden]), textarea[id], select[id]');
         inputs.forEach(input => {
             hideWarning(input);
-            if (!input.value.trim() && input.id !== 'add-modal-customer-notes' && input.id !== 'update-modal-customer-notes') { // Make notes optional
+            const isOptional = input.id.includes('customer-notes');
+            if (!isOptional && !input.value.trim()) {
                 isAllValid = false;
             }
             if (input.id.includes('phone') && input.value.trim() && !/^\d+$/.test(input.value.trim())) {
@@ -87,7 +87,7 @@ document.addEventListener('DOMContentLoaded', () => {
             modal.querySelectorAll('.input-warning').forEach(el => el.remove());
             modal.classList.add('hidden');
         }
-        const anyModalOpen = document.querySelector('#modals-container .fixed:not(.hidden)');
+        const anyModalOpen = Array.from(modals).some(m => !m.classList.contains('hidden'));
         if (!anyModalOpen) {
             document.body.style.overflow = '';
         }
@@ -97,31 +97,23 @@ document.addEventListener('DOMContentLoaded', () => {
     const hideLoading = () => loadingIndicator.classList.add('hidden');
 
     const updateViewButtons = () => {
-        if (currentView === 'bubble') {
-            viewBubbleBtn.classList.add('bg-blue-100', 'text-blue-700');
-            viewListBtn.classList.remove('bg-blue-100', 'text-blue-700');
-        } else {
-            viewListBtn.classList.add('bg-blue-100', 'text-blue-700');
-            viewBubbleBtn.classList.remove('bg-blue-100', 'text-blue-700');
-        }
+        viewBubbleBtn.classList.toggle('bg-blue-100', currentView === 'bubble');
+        viewBubbleBtn.classList.toggle('text-blue-700', currentView === 'bubble');
+        viewListBtn.classList.toggle('bg-blue-100', currentView === 'list');
+        viewListBtn.classList.toggle('text-blue-700', currentView === 'list');
     };
 
     // --- Data Formatting & Logic Functions ---
     const getMostRecentService = (allServices) => {
         if (!allServices || allServices.length === 0) return null;
-        const completedOrPastServices = [...allServices]
-            .filter(s => {
-                const serviceDate = new Date(s.date);
-                const isInstallation = s.notes === 'Pemasangan Awal';
-                const isCompletedOrPast = s.status === 'COMPLETED' || (!isNaN(serviceDate.getTime()) && serviceDate < today);
-                return !isInstallation && isCompletedOrPast;
-            })
+        const completedServices = allServices
+            .filter(s => s.status === 'COMPLETED' && s.notes !== 'Pemasangan Awal')
             .sort((a, b) => new Date(b.date) - new Date(a.date));
-        return completedOrPastServices.length > 0 ? completedOrPastServices[0].date : null;
+        return completedServices.length > 0 ? completedServices[0].date : null;
     };
 
     const calculatePriority = (customer) => {
-        if (!customer.nextService) return 'Rendah';
+        if (customer.status !== 'UPCOMING' || !customer.nextService) return 'Rendah';
         const nextServiceDate = new Date(customer.nextService);
         if (isNaN(nextServiceDate.getTime())) return 'Rendah';
         const daysDiff = Math.ceil((nextServiceDate - today) / (1000 * 60 * 60 * 24));
@@ -133,21 +125,24 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const getContactStatusDisplay = (customer) => {
         switch (customer.status) {
-            case 'CONTACTED':
             case 'COMPLETED':
-                return { color: 'bg-green-100 text-green-800', icon: 'check-circle', text: 'Sudah dihubungi' };
+                return { color: 'bg-green-100 text-green-800', icon: 'check-circle', text: 'Sudah Selesai' };
             case 'OVERDUE':
-                return { color: 'bg-red-100 text-red-800', icon: 'alert-circle', text: 'Terlambat dihubungi' };
+                return { color: 'bg-red-100 text-red-800', icon: 'alert-circle', text: 'Terlambat Dihubungi' };
             case 'UPCOMING':
             default:
-                return { color: 'bg-gray-100 text-gray-800', icon: 'clock', text: 'Belum dihubungi' };
+                const priority = calculatePriority(customer);
+                if (priority === 'Sangat Mendesak') {
+                    return { color: 'bg-red-100 text-red-800', icon: 'alert-triangle', text: 'Jadwal Terlewat' };
+                }
+                return { color: 'bg-gray-100 text-gray-800', icon: 'clock', text: 'Akan Datang' };
         }
     };
 
     const getDaysUntilService = (customer) => {
-        if (!customer.nextService) return 'Tanggal belum di atur';
+        if (!customer.nextService || customer.status === 'COMPLETED') return 'Tidak ada jadwal';
         const nextServiceDate = new Date(customer.nextService);
-        if (isNaN(nextServiceDate.getTime())) return 'Tanggal tidak Valid';
+        if (isNaN(nextServiceDate.getTime())) return 'Tanggal tidak valid';
         const daysDiff = Math.ceil((nextServiceDate - today) / (1000 * 60 * 60 * 24));
         if (daysDiff < 0) return `Terlambat ${Math.abs(daysDiff)} hari`;
         if (daysDiff === 0) return 'Hari ini';
@@ -167,8 +162,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const formatDate = (dateString) => {
         if (!dateString) return 'N/A';
         const date = new Date(dateString);
-        if (isNaN(date.getTime())) return 'Invalid Date';
-        return date.toLocaleDateString('id-ID', { day: '2-digit', month: '2-digit', year: 'numeric' });
+        if (isNaN(date.getTime())) return 'Tanggal tidak valid';
+        return date.toLocaleDateString('id-ID', { day: '2-digit', month: 'long', year: 'numeric' });
     };
 
     function populateCityFilter(customers) {
@@ -191,7 +186,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const contactStatusDisplay = getContactStatusDisplay(customer);
         const serviceDays = getDaysUntilService(customer);
         const mostRecentServiceDate = getMostRecentService(customer.services);
-        const completedServices = customer.services ? customer.services.filter(s => s.status === 'COMPLETED') : [];
+        const allServicesSorted = customer.services ? [...customer.services].sort((a, b) => new Date(b.date) - new Date(a.date)) : [];
 
         document.getElementById('detail-modal-name').textContent = customer.name;
         document.getElementById('detail-modal-priority').textContent = priority;
@@ -206,56 +201,46 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('detail-modal-phone').textContent = customer.phone || 'N/A';
         document.getElementById('detail-modal-last-service').textContent = formatDate(mostRecentServiceDate);
         document.getElementById('detail-modal-handler').textContent = customer.handler || 'N/A';
-        document.getElementById('detail-modal-notes').textContent = customer.notes || 'Belum pernah dihubungi';
-
-        const historyTableBody = document.createElement('tbody');
-        historyTableBody.className = "bg-white divide-y divide-gray-200";
-        if (completedServices.length > 0) {
-            historyTableBody.innerHTML = completedServices
-                .sort((a, b) => new Date(a.date) - new Date(b.date))
-                .map((service, index) => `
-                    <tr>
-                        <td class="px-3 py-2 whitespace-nowrap">${index + 1}</td>
-                        <td class="px-3 py-2 whitespace-nowrap">${formatDate(service.date)}</td>
-                        <td class="px-3 py-2 whitespace-normal break-words">${service.notes || '-'}</td>
-                        <td class="px-3 py-2 whitespace-nowrap">${service.handler || '-'}</td>
-                        <td class="px-3 py-2 whitespace-nowrap">
-                            <button data-action="edit-note"
-                                    data-service-id="${service.serviceID}"
-                                    data-service-date="${service.date}"
-                                    data-current-notes="${service.notes || ''}"
-                                    data-current-handler="${service.handler || ''}"
-                                    data-customer-name="${customer.name}"
-                                    class="px-2 py-1 text-xs rounded bg-gray-200 text-gray-800 hover:bg-gray-300">
-                                Edit
-                            </button>
-                        </td>
-                    </tr>
-                `).join('');
-        } else {
-            historyTableBody.innerHTML = '<tr><td colspan="5" class="text-center py-4 text-gray-500">Tidak ada riwayat servis yang selesai.</td></tr>';
-        }
+        document.getElementById('detail-modal-notes').textContent = customer.notes || 'Tidak ada catatan';
 
         const historyContainer = document.getElementById('detail-modal-history');
-        historyContainer.innerHTML = '';
-        if (completedServices.length > 0) {
-            const historyTable = document.createElement('table');
-            historyTable.className = 'min-w-full divide-y divide-gray-200';
-            historyTable.innerHTML = `
-                <thead class="bg-gray-100">
-                    <tr>
-                        <th scope="col" class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">No</th>
-                        <th scope="col" class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tanggal</th>
-                        <th scope="col" class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Catatan</th>
-                        <th scope="col" class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Teknisi</th>
-                        <th scope="col" class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Aksi</th>
-                    </tr>
-                </thead>
+        if (allServicesSorted.length > 0) {
+            historyContainer.innerHTML = `
+                <table class="min-w-full divide-y divide-gray-200">
+                    <thead class="bg-gray-100">
+                        <tr>
+                            <th scope="col" class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tanggal</th>
+                            <th scope="col" class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                            <th scope="col" class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Catatan</th>
+                            <th scope="col" class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Teknisi</th>
+                            <th scope="col" class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Aksi</th>
+                        </tr>
+                    </thead>
+                    <tbody class="bg-white divide-y divide-gray-200">
+                        ${allServicesSorted.map(service => `
+                            <tr>
+                                <td class="px-3 py-2 whitespace-nowrap">${formatDate(service.date)}</td>
+                                <td class="px-3 py-2 whitespace-nowrap"><span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${service.status === 'COMPLETED' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}">${service.status}</span></td>
+                                <td class="px-3 py-2 whitespace-normal break-words">${service.notes || '-'}</td>
+                                <td class="px-3 py-2 whitespace-nowrap">${service.handler || '-'}</td>
+                                <td class="px-3 py-2 whitespace-nowrap">
+                                    <button data-action="edit-note"
+                                            data-service-id="${service.serviceID}"
+                                            data-service-date="${service.date}"
+                                            data-current-notes="${service.notes || ''}"
+                                            data-current-handler="${service.handler || ''}"
+                                            data-customer-name="${customer.name}"
+                                            class="px-2 py-1 text-xs rounded bg-gray-200 text-gray-800 hover:bg-gray-300">
+                                        Edit
+                                    </button>
+                                </td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
             `;
-            historyTable.appendChild(historyTableBody);
-            historyContainer.appendChild(historyTable);
         } else {
-            historyContainer.innerHTML = 'Tidak ada riwayat servis yang selesai.';
+            historyContainer.innerHTML = 'Tidak ada riwayat servis.';
         }
 
         document.getElementById('detail-modal-call').dataset.phone = customer.phone;
@@ -265,34 +250,30 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('detail-modal-delete').dataset.customerId = customer.customerID;
         document.getElementById('detail-modal-delete').dataset.customerName = customer.name;
 
-        if (window.lucide) window.lucide.createIcons();
+        lucide.createIcons();
         openModal(customerDetailModal);
     }
 
     // --- Core Rendering Function ---
     function renderCustomers() {
-        if (currentView === 'bubble') {
-            customerListContainer.className = 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4';
-        } else {
-            customerListContainer.className = 'flex flex-col gap-4';
-        }
+        customerListContainer.className = currentView === 'bubble'
+            ? 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4'
+            : 'flex flex-col gap-4';
 
         const sortedAndFilteredCustomers = customers
             .filter(customer => {
                 if (!customer || !customer.name) return false;
                 if (filterByCity !== 'all' && customer.kota !== filterByCity) return false;
+
                 const lowerSearchTerm = searchTerm.toLowerCase();
                 const matchesSearch = (customer.name || '').toLowerCase().includes(lowerSearchTerm) ||
                     (customer.address || '').toLowerCase().includes(lowerSearchTerm) ||
                     (customer.phone || '').toLowerCase().includes(lowerSearchTerm);
                 if (!matchesSearch) return false;
+
                 switch (filterBy) {
                     case 'all': return true;
-                    case 'overdue': {
-                        if (!customer.nextService) return false;
-                        const nextServiceDate = new Date(customer.nextService);
-                        return !isNaN(nextServiceDate.getTime()) && nextServiceDate < today && customer.status !== 'COMPLETED';
-                    }
+                    case 'overdue': return calculatePriority(customer) === 'Sangat Mendesak';
                     case 'upcoming': {
                         if (!customer.nextService) return false;
                         const nextServiceDate = new Date(customer.nextService);
@@ -321,18 +302,18 @@ document.addEventListener('DOMContentLoaded', () => {
             const priority = calculatePriority(customer);
             const card = document.createElement('div');
             card.dataset.customerId = customer.customerID;
+            card.className = `bg-white rounded-lg shadow-sm border border-gray-200 hover:shadow-md transition-shadow cursor-pointer ${currentView === 'bubble' ? 'p-4' : 'flex items-center justify-between p-4'}`;
 
             if (currentView === 'bubble') {
-                card.className = 'bg-white rounded-lg shadow-sm border border-gray-200 p-4 hover:shadow-md transition-shadow cursor-pointer';
                 card.innerHTML = `
                     <div class="flex items-center justify-between mb-2">
-                        <h3 class="text-lg font-bold text-gray-900">${customer.name}</h3>
+                        <h3 class="text-lg font-bold text-gray-900 truncate">${customer.name}</h3>
                         <span class="px-2 py-0.5 rounded-full text-xs font-medium ${getPriorityColor(priority)}">${priority}</span>
                     </div>
                     <div class="space-y-1">
                         <div class="flex items-center gap-2 text-sm text-gray-600">
                             <i data-lucide="map-pin" class="w-4 h-4"></i>
-                            <span>${customer.kota || 'N/A'}</span>
+                            <span class="truncate">${customer.kota || 'N/A'}</span>
                         </div>
                         <div class="flex items-center gap-2 text-sm text-gray-600">
                             <i data-lucide="calendar" class="w-4 h-4"></i>
@@ -341,15 +322,14 @@ document.addEventListener('DOMContentLoaded', () => {
                     </div>
                 `;
             } else { // List view
-                card.className = `flex items-center justify-between p-4 rounded-lg shadow-sm border border-gray-200 hover:shadow-md transition-shadow cursor-pointer bg-white`;
                 card.innerHTML = `
-                    <div class="flex items-center gap-4 flex-grow">
-                        <h3 class="text-lg font-bold text-gray-900 flex-shrink-0">${customer.name}</h3>
+                    <div class="flex items-center gap-4 flex-grow min-w-0">
+                        <h3 class="text-lg font-bold text-gray-900 truncate">${customer.name}</h3>
                         <div class="relative pl-4 data-separator hidden md:block">
                             <span class="text-sm font-medium text-gray-600">${customer.kota || 'N/A'}</span>
                         </div>
-                        <div class="relative pl-4 data-separator flex-grow">
-                            <span class="text-sm font-medium text-gray-600">Servis Berikutnya: <span class="font-bold">${formatDate(customer.nextService)}</span></span>
+                        <div class="relative pl-4 data-separator flex-grow min-w-0">
+                            <span class="text-sm font-medium text-gray-600 truncate">Servis Berikutnya: <span class="font-bold">${formatDate(customer.nextService)}</span></span>
                         </div>
                     </div>
                     <div class="flex-shrink-0">
@@ -360,21 +340,22 @@ document.addEventListener('DOMContentLoaded', () => {
             customerListContainer.appendChild(card);
         });
 
+        // Update Stats
         document.getElementById('stats-total').textContent = customers.length;
-        document.getElementById('stats-overdue').textContent = customers.filter(c => { if (!c.nextService) return false; const d = new Date(c.nextService); return !isNaN(d.getTime()) && d < today && c.status !== 'COMPLETED'; }).length;
+        document.getElementById('stats-overdue').textContent = customers.filter(c => calculatePriority(c) === 'Sangat Mendesak').length;
         document.getElementById('stats-due-month').textContent = customers.filter(c => { if (!c.nextService) return false; const d = new Date(c.nextService); if (isNaN(d.getTime())) return false; const diff = Math.ceil((d - today) / (1000 * 60 * 60 * 24)); return diff >= 0 && diff <= 30; }).length;
         document.getElementById('stats-contacted').textContent = customers.filter(c => c.status === 'COMPLETED').length;
         document.getElementById('stats-not-contacted').textContent = customers.filter(c => c.status === 'UPCOMING').length;
         document.getElementById('stats-contact-overdue').textContent = customers.filter(c => c.status === 'OVERDUE').length;
 
-        if (window.lucide) window.lucide.createIcons();
+        lucide.createIcons();
     };
 
     // --- Modal Setup Functions ---
     function setupAndOpenServiceModal(customer) {
         selectedCustomer = customer;
         document.getElementById('service-modal-customer-name').textContent = customer.name;
-        const currentDate = customer.nextService ? new Date(customer.nextService).toISOString().split('T')[0] : new Date().toISOString().split('T')[0];
+        const currentDate = customer.nextService ? new Date(customer.nextService).toISOString().split('T')[0] : '';
         document.getElementById('service-modal-date').value = currentDate;
         document.getElementById('service-modal-handler').value = customer.handler || '';
         openModal(updateServiceModal);
@@ -384,10 +365,11 @@ document.addEventListener('DOMContentLoaded', () => {
         selectedCustomer = customer;
         document.getElementById('contact-modal-name').textContent = customer.name;
         document.getElementById('contact-modal-phone').textContent = customer.phone;
-        document.getElementById('contact-modal-status').value = customer.status === 'CONTACTED' ? 'contacted' : (customer.status === 'OVERDUE' ? 'overdue' : 'not_contacted');
+        const statusMap = { 'UPCOMING': 'not_contacted', 'COMPLETED': 'contacted', 'OVERDUE': 'overdue' };
+        document.getElementById('contact-modal-status').value = statusMap[customer.status] || 'not_contacted';
         document.getElementById('contact-modal-notes').value = customer.notes || '';
-        postponeDurationContainer.classList.toggle('hidden', document.getElementById('contact-modal-status').value !== 'postponed');
-        refusalFollowUpContainer.classList.toggle('hidden', document.getElementById('contact-modal-status').value !== 'refused');
+        postponeDurationContainer.classList.add('hidden');
+        refusalFollowUpContainer.classList.add('hidden');
         openModal(updateContactModal);
     }
 
@@ -417,12 +399,12 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- Generic API Call Handler ---
     async function handleApiCall(apiFunction, data, successMessage, errorMessagePrefix) {
         showLoading();
+        modals.forEach(closeModal);
         try {
-            // Panggil fungsi API dengan activeSheetId. 'data' bisa berupa objek atau null
             const result = await apiFunction(activeSheetId, data);
             if (result.success) {
                 if (successMessage) alert(successMessage);
-                initializeApp(); // Muat ulang data untuk sheet yang sama
+                initializeApp({ keepFilters: true });
             } else {
                 throw new Error(result.error);
             }
@@ -441,70 +423,26 @@ document.addEventListener('DOMContentLoaded', () => {
         cityFilterSelect.addEventListener('change', (e) => { filterByCity = e.target.value; renderCustomers(); });
 
         viewBubbleBtn.addEventListener('click', () => {
-            if (currentView !== 'bubble') {
-                currentView = 'bubble';
-                localStorage.setItem('customerView', 'bubble');
-                updateViewButtons();
-                renderCustomers();
-            }
+            currentView = 'bubble';
+            localStorage.setItem('customerView', 'bubble');
+            updateViewButtons();
+            renderCustomers();
         });
 
         viewListBtn.addEventListener('click', () => {
-            if (currentView !== 'list') {
-                currentView = 'list';
-                localStorage.setItem('customerView', 'list');
-                updateViewButtons();
-                renderCustomers();
-            }
+            currentView = 'list';
+            localStorage.setItem('customerView', 'list');
+            updateViewButtons();
+            renderCustomers();
         });
 
         document.getElementById('add-customer-btn').addEventListener('click', setupAndOpenAddCustomerModal);
         document.getElementById('refresh-btn').addEventListener('click', () => initializeApp());
         document.getElementById('retry-btn').addEventListener('click', () => initializeApp());
-
-        if (!window.electronAPI) {
-            console.warn("Electron API not found. Using mock data and functions.");
-            window.electronAPI = {
-                refreshData: async () => ({
-                    success: true,
-                    data: [
-                        { customerID: '1', serviceID: 's1', name: 'Budi Santoso', phone: '081234567890', address: 'Jl. Merdeka 1', kota: 'Jakarta', nextService: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString(), handler: 'Tim A', status: 'UPCOMING', notes: '', services: [{ serviceID: 's0', date: new Date(Date.now() - 375 * 24 * 60 * 60 * 1000).toISOString(), status: 'COMPLETED', notes: 'Pemasangan Awal', handler: 'Tim A' }] },
-                        { customerID: '2', serviceID: 's2', name: 'Citra Lestari', phone: '082345678901', address: 'Jl. Pahlawan 2', kota: 'Surabaya', nextService: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString(), handler: 'Tim B', status: 'UPCOMING', notes: 'Sudah dihubungi', services: [] },
-                        { customerID: '3', serviceID: 's3', name: 'Doni Firmansyah', phone: '083456789012', address: 'Jl. Kemerdekaan 3', kota: 'Bandung', nextService: new Date(Date.now() + 25 * 24 * 60 * 60 * 1000).toISOString(), handler: 'Tim C', status: 'COMPLETED', notes: '', services: [] },
-                        { customerID: '4', serviceID: 's4', name: 'Eka Putri', phone: '084567890123', address: 'Jl. Nusantara 4', kota: 'Jakarta', nextService: new Date(Date.now() + 45 * 24 * 60 * 60 * 1000).toISOString(), handler: 'Tim A', status: 'OVERDUE', notes: 'Tidak diangkat', services: [] },
-                    ]
-                }),
-                exportData: async () => { alert("Export berhasil (mode web)"); return { success: true, path: "/mock/path/data.xlsx" } },
-                importData: async () => { alert("Import berhasil (mode web)"); return { success: true } },
-                openWhatsApp: (phone) => { if (phone) window.open(`https://wa.me/${phone.replace(/^0/, '62')}`, '_blank'); else alert("Nomor telepon tidak tersedia."); },
-                updateContactStatus: async (data) => { console.log("Update Contact:", data); return { success: true } },
-                updateService: async (data) => { console.log("Update Service:", data); return { success: true } },
-                updateHistoryNote: async (data) => { console.log("Update History Note:", data); return { success: true } },
-                addCustomer: async (data) => { console.log("Add Customer:", data); return { success: true } },
-                updateCustomer: async (data) => { console.log("Update Customer:", data); return { success: true } },
-                deleteCustomer: async (id) => { console.log("Delete Customer:", id); return { success: true } },
-            };
-        }
-
-        document.getElementById('export-data-btn').addEventListener('click', async () => {
-            showLoading();
-            try {
-                const result = await window.electronAPI.exportData();
-                if (result.success) {
-                    alert(`Data berhasil diekspor dan disimpan di:\n${result.path}`);
-                } else {
-                    alert(`Gagal mengekspor data: ${result.error}`);
-                }
-            } catch (error) {
-                alert('Terjadi kesalahan saat mengekspor data.');
-            } finally {
-                hideLoading();
-            }
-        });
-
+        document.getElementById('export-data-btn').addEventListener('click', () => handleApiCall(window.electronAPI.exportData, null, 'Data berhasil diekspor!', 'Gagal mengekspor data'));
         document.getElementById('import-data-btn').addEventListener('click', () => {
-            if (confirm('Apakah Anda yakin ingin mengimpor data? Ini akan menimpa data yang ada.')) {
-                handleApiCall(window.electronAPI.importData, null, 'Data berhasil diimpor!', 'Gagal mengimpor data');
+            if (confirm('Apakah Anda yakin ingin mengimpor data? Ini akan menambahkan data baru dari file.')) {
+                handleApiCall(window.electronAPI.importData, null, 'Proses impor selesai!', 'Gagal mengimpor data');
             }
         });
 
@@ -512,19 +450,6 @@ document.addEventListener('DOMContentLoaded', () => {
             const selectedValue = e.target.value;
             postponeDurationContainer.classList.toggle('hidden', selectedValue !== 'postponed');
             refusalFollowUpContainer.classList.toggle('hidden', selectedValue !== 'refused');
-        });
-
-        document.getElementById('contact-modal-save').addEventListener('click', () => {
-            const statusMap = { 'not_contacted': 'UPCOMING', 'contacted': 'CONTACTED', 'overdue': 'OVERDUE', 'postponed': 'POSTPONED', 'refused': 'REFUSED' };
-            const selectedStatus = contactModalStatus.value;
-            const data = {
-                serviceID: selectedCustomer.serviceID,
-                newStatus: statusMap[selectedStatus],
-                notes: document.getElementById('contact-modal-notes').value
-            };
-            if (selectedStatus === 'postponed') data.postponeDuration = document.getElementById('contact-modal-postpone-duration').value;
-            else if (selectedStatus === 'refused') data.refusalFollowUp = document.getElementById('contact-modal-refusal-follow-up').value;
-            handleApiCall(window.electronAPI.updateContactStatus, data, 'Status kontak berhasil diupdate!', 'Status kontak gagal di update');
         });
 
         customerListContainer.addEventListener('click', (e) => {
@@ -540,20 +465,21 @@ document.addEventListener('DOMContentLoaded', () => {
             const button = e.target.closest('button[data-action]');
             if (!button) return;
             const action = button.dataset.action;
-            if (action !== 'close') {
-                closeModal(customerDetailModal);
-            }
+
+            const customerId = selectedCustomer?.customerID;
+
+            if (action !== 'close') closeModal(customerDetailModal);
+
             switch (action) {
-                case 'call': window.electronAPI.openWhatsApp(button.dataset.phone); break;
-                case 'update-contact': if (selectedCustomer) setupAndOpenContactModal(selectedCustomer); break;
-                case 'update-service': if (selectedCustomer) setupAndOpenServiceModal(selectedCustomer); break;
-                case 'edit-customer': if (selectedCustomer) setupAndOpenUpdateCustomerModal(selectedCustomer); break;
+                case 'call': window.electronAPI.openWhatsapp(button.dataset.phone); break;
+                case 'update-contact': setupAndOpenContactModal(selectedCustomer); break;
+                case 'update-service': setupAndOpenServiceModal(selectedCustomer); break;
+                case 'edit-customer': setupAndOpenUpdateCustomerModal(selectedCustomer); break;
                 case 'delete-customer':
-                    if (confirm(`Yakin ingin menghapus ${button.dataset.customerName}?`)) {
+                    if (confirm(`Yakin ingin menghapus ${button.dataset.customerName}? Semua riwayat servis juga akan terhapus.`)) {
                         handleApiCall(window.electronAPI.deleteCustomer, button.dataset.customerId, 'Pelanggan berhasil dihapus!', 'Gagal menghapus pelanggan');
                     }
                     break;
-                case 'close': closeModal(customerDetailModal); break;
             }
         });
 
@@ -570,6 +496,24 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (e.target.closest('[data-action="close"]')) closeModal(modal);
             });
             modal.addEventListener('input', () => validateForm(modal));
+
+            const form = modal.querySelector('form');
+            if (form) {
+                form.addEventListener('submit', e => e.preventDefault());
+            }
+        });
+
+        document.getElementById('contact-modal-save').addEventListener('click', () => {
+            const statusMap = { 'not_contacted': 'UPCOMING', 'contacted': 'CONTACTED', 'overdue': 'OVERDUE', 'postponed': 'POSTPONED', 'refused': 'REFUSED' };
+            const selectedStatus = contactModalStatus.value;
+            const data = {
+                serviceID: selectedCustomer.serviceID,
+                newStatus: statusMap[selectedStatus],
+                notes: document.getElementById('contact-modal-notes').value,
+                postponeDuration: document.getElementById('contact-modal-postpone-duration').value,
+                refusalFollowUp: document.getElementById('contact-modal-refusal-follow-up').value
+            };
+            handleApiCall(window.electronAPI.updateContactStatus, data, 'Status kontak berhasil diupdate!', 'Gagal mengupdate status');
         });
 
         document.getElementById('service-modal-save').addEventListener('click', () => {
@@ -578,7 +522,6 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         document.getElementById('history-note-modal-save').addEventListener('click', () => {
-            if (!confirm('Yakin ingin menyimpan perubahan pada riwayat ini?')) return;
             const data = { serviceID: selectedServiceForNoteEdit.serviceId, newNotes: document.getElementById('history-note-modal-notes').value, newHandler: document.getElementById('history-note-modal-handler').value };
             handleApiCall(window.electronAPI.updateHistoryNote, data, 'Catatan riwayat berhasil diperbarui!', 'Gagal memperbarui catatan');
         });
@@ -595,8 +538,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape') {
-                const openModal = document.querySelector('#modals-container .fixed:not(.hidden)');
-                if (openModal) closeModal(openModal);
+                modals.forEach(closeModal);
             }
         });
     }
@@ -605,8 +547,7 @@ document.addEventListener('DOMContentLoaded', () => {
     async function initializeApp(options = {}) {
         const { keepFilters = false } = options;
 
-        const savedView = localStorage.getItem('customerView');
-        currentView = (savedView === 'list' || savedView === 'bubble') ? savedView : 'bubble';
+        currentView = localStorage.getItem('customerView') || 'bubble';
         updateViewButtons();
 
         showLoading();
@@ -614,11 +555,14 @@ document.addEventListener('DOMContentLoaded', () => {
         customerListContainer.innerHTML = '';
         emptyState.classList.add('hidden');
 
-        if (!activeSheetId) return;
-        showLoading();
+        if (!activeSheetId) {
+            console.error("Tidak ada ID sheet aktif. Menunggu data dari main process...");
+            hideLoading();
+            return;
+        }
 
         try {
-            const result = await window.electronAPI.refreshData();
+            const result = await window.electronAPI.refreshData(activeSheetId);
             if (result.success) {
                 customers = result.data || [];
                 if (!keepFilters) {
@@ -633,12 +577,9 @@ document.addEventListener('DOMContentLoaded', () => {
             errorIndicator.classList.remove('hidden');
         } finally {
             hideLoading();
-            if (window.lucide) {
-                window.lucide.createIcons();
-            }
+            lucide.createIcons();
         }
     }
 
     setupEventListeners();
-    initializeApp();
 });

@@ -9,13 +9,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
     openReminderForSheet: (data) => ipcRenderer.send('open-reminder-for-sheet', data),
 
     // --- Fungsi untuk Jendela Reminder ---
-    refreshData: (sheetId) => ipcRenderer.invoke('refresh-data', sheetId),
-    addCustomer: (sheetId, customerData) => ipcRenderer.invoke('add-customer', { sheetId, customerData }),
-    updateContactStatus: (sheetId, data) => ipcRenderer.invoke('update-contact-status', { sheetId, ...data }),
-    updateService: (sheetId, data) => ipcRenderer.invoke('update-service', { sheetId, ...data }),
-    updateCustomer: (sheetId, data) => ipcRenderer.invoke('update-customer', { sheetId, ...data }),
-    deleteCustomer: (sheetId, customerID) => ipcRenderer.invoke('delete-customer', { sheetId, customerID }),
-    updateHistoryNote: (sheetId, data) => ipcRenderer.invoke('update-history-note', { sheetId, ...data }),
+    refreshData: (spreadsheetId) => ipcRenderer.invoke('refresh-data', spreadsheetId),
+    addCustomer: (spreadsheetId, customerData) => ipcRenderer.invoke('add-customer', { spreadsheetId, customerData }),
+    updateContactStatus: (spreadsheetId, data) => ipcRenderer.invoke('update-contact-status', { spreadsheetId, ...data }),
+    updateService: (spreadsheetId, data) => ipcRenderer.invoke('update-service', { spreadsheetId, ...data }),
+    updateCustomer: (spreadsheetId, data) => ipcRenderer.invoke('update-customer', { spreadsheetId, ...data }),
+    deleteCustomer: (spreadsheetId, customerID) => ipcRenderer.invoke('delete-customer', { spreadsheetId, customerID }),
+    updateHistoryNote: (spreadsheetId, data) => ipcRenderer.invoke('update-history-note', { spreadsheetId, ...data }),
+    exportData: (spreadsheetId) => ipcRenderer.invoke('export-data', spreadsheetId),
+    importData: (spreadsheetId) => ipcRenderer.invoke('import-data', spreadsheetId),
 
     // Fungsi utilitas
     openWhatsapp: (phone) => ipcRenderer.invoke('open-whatsapp', phone),

@@ -34,10 +34,8 @@ function writeDatabases(databases) {
   }
   fs.writeFileSync(dbPath, JSON.stringify(databases, null, 2), 'utf-8');
 }
-// const SPREADSHEET_ID = '1x4AmlaQGgdqHLEHKo_jZlGvyq9XsHigz6r6qGHFll0o';
 
 // --- Helper Functions ---
-
 function formatDateToYYYYMMDD(date) {
   const d = new Date(date);
   const year = d.getFullYear();
@@ -46,25 +44,45 @@ function formatDateToYYYYMMDD(date) {
   return `${year}${month}${day}`;
 }
 
-async function getSheets() {
-  const auth = new JWT({
-    email: creds.client_email,
-    key: creds.private_key,
-    scopes: ['https://www.googleapis.com/auth/spreadsheets'],
-  });
-  const doc = new GoogleSpreadsheet(SPREADSHEET_ID, auth);
-  await doc.loadInfo();
-  const customerSheet = doc.sheetsByTitle['Customers'];
-  const serviceSheet = doc.sheetsByTitle['Services'];
-  if (!customerSheet || !serviceSheet) {
-    throw new Error("Pastikan sheet 'Customers' dan 'Services' ada dan sudah di-share.");
+async function getSheets(spreadsheetId) {
+  if (!spreadsheetId) {
+    throw new Error('Spreadsheet ID tidak ditemukan atau tidak valid.');
   }
-  return { doc, customerSheet, serviceSheet };
+
+  try {
+    const auth = new JWT({
+      email: creds.client_email,
+      key: creds.private_key,
+      scopes: ['https://www.googleapis.com/auth/spreadsheets'],
+    });
+
+    const doc = new GoogleSpreadsheet(spreadsheetId, auth);
+    await doc.loadInfo();
+
+    const customerSheet = doc.sheetsByTitle['Customers'];
+    const serviceSheet = doc.sheetsByTitle['Services'];
+
+    if (!customerSheet) {
+      throw new Error("Sheet 'Customers' tidak ditemukan. Pastikan nama sheet tepat 'Customers'");
+    }
+
+    if (!serviceSheet) {
+      throw new Error("Sheet 'Services' tidak ditemukan. Pastikan nama sheet tepat 'Services'");
+    }
+
+    return { doc, customerSheet, serviceSheet };
+  } catch (error) {
+    console.error('Error accessing Google Sheets:', error);
+    if (error.response?.status === 404 || error.message.includes('404')) {
+      throw new Error(`Spreadsheet tidak ditemukan. Pastikan ID benar dan spreadsheet di-share dengan: ${creds.client_email}`);
+    }
+    throw error;
+  }
 }
 
 // --- ID Generator Functions ---
-async function getNextGlobalSequence() {
-  const { customerSheet } = await getSheets();
+async function getNextGlobalSequence(spreadsheetId) {
+  const { customerSheet } = await getSheets(spreadsheetId);
   const rows = await customerSheet.getRows();
   const allIds = rows.map(r => r.get('CustomerID'));
 
@@ -80,8 +98,8 @@ async function getNextGlobalSequence() {
   return maxSequence + 1;
 }
 
-async function generateNewServiceId(serviceDate) {
-  const { serviceSheet } = await getSheets();
+async function generateNewServiceId(spreadsheetId, serviceDate) {
+  const { serviceSheet } = await getSheets(spreadsheetId);
   const rows = await serviceSheet.getRows();
   const datePart = formatDateToYYYYMMDD(serviceDate);
   const idPrefix = `SVC-${datePart}`;
@@ -98,14 +116,15 @@ async function generateNewServiceId(serviceDate) {
 }
 
 // --- Data Fetching Functions ---
-async function getDataFromSheets() {
-  const { customerSheet, serviceSheet } = await getSheets();
+async function getDataFromSheets(spreadsheetId) {
+  const { customerSheet, serviceSheet } = await getSheets(spreadsheetId);
   const customerRows = await customerSheet.getRows();
   const serviceRows = await serviceSheet.getRows();
 
   const customersMap = new Map();
   customerRows.forEach(row => {
     customersMap.set(row.get('CustomerID'), {
+      customerID: row.get('CustomerID'),
       name: row.get('Nama'),
       address: row.get('Alamat'),
       phone: row.get('No Telp'),
@@ -162,8 +181,8 @@ async function getDataFromSheets() {
   return combinedData;
 }
 
-async function getFlatDataForExport() {
-  const { customerSheet, serviceSheet } = await getSheets();
+async function getFlatDataForExport(spreadsheetId) {
+  const { customerSheet, serviceSheet } = await getSheets(spreadsheetId);
   const customerRows = await customerSheet.getRows();
   const serviceRows = await serviceSheet.getRows();
 
@@ -180,179 +199,53 @@ async function getFlatDataForExport() {
     });
   });
 
-  const flatData = [];
-  serviceRows.forEach(row => {
+  const flatData = serviceRows.map(row => {
     const customerID = row.get('CustomerID');
-    const customerInfo = customersMap.get(customerID);
-
-    if (customerInfo) {
-      flatData.push({
-        ...customerInfo,
-        serviceID: row.get('ServiceID'),
-        serviceDate: row.get('ServiceDate'),
-        status: row.get('Status'),
-        notes: row.get('Notes') || '',
-        handler: row.get('Handler') || '',
-      });
-    }
+    const customerInfo = customersMap.get(customerID) || {};
+    return {
+      ...customerInfo,
+      serviceID: row.get('ServiceID'),
+      serviceDate: row.get('ServiceDate'),
+      status: row.get('Status'),
+      notes: row.get('Notes') || '',
+      handler: row.get('Handler') || '',
+    };
   });
 
   return flatData;
 }
 
-
-// --- Reminder Function ---
-
-async function checkUpcomingServices() {
-  if (!Notification.isSupported()) {
-    console.log('Sistem notifikasi tidak didukung pada OS ini.');
-    return;
-  }
-  console.log('Memeriksa jadwal untuk notifikasi...');
-  try {
-    const data = await getDataFromSheets();
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    const deadlineGroups = {};
-    const contactOverdueCustomers = []; // Pelanggan dengan status OVERDUE
-    const serviceDateOverdueCustomers = []; // Pelanggan dengan jadwal terlewat
-
-    data.forEach(customer => {
-      // Cek jadwal servis yang akan datang atau sudah terlewat
-      if (customer.nextService && customer.status === 'UPCOMING') {
-        const nextServiceDate = new Date(customer.nextService);
-        nextServiceDate.setHours(0, 0, 0, 0);
-        if (isNaN(nextServiceDate.getTime())) return;
-
-        const timeDiff = nextServiceDate.getTime() - today.getTime();
-        const daysDiff = Math.ceil(timeDiff / (1000 * 3600 * 24));
-
-        if (daysDiff >= 0 && daysDiff <= 3) { // Pengingat jadwal akan datang
-          if (!deadlineGroups[daysDiff]) {
-            deadlineGroups[daysDiff] = [];
-          }
-          deadlineGroups[daysDiff].push(customer.name);
-        } else if (daysDiff < 0) { // Pengingat jadwal sudah terlewat
-          serviceDateOverdueCustomers.push(customer.name);
-        }
-      }
-
-      // Cek pelanggan yang kontak-nya ditandai terlambat
-      if (customer.status === 'OVERDUE') {
-        contactOverdueCustomers.push(customer.name);
-      }
-    });
-
-    // Kirim notifikasi untuk jadwal mendatang
-    for (const days in deadlineGroups) {
-      const customerCount = deadlineGroups[days].length;
-      if (customerCount === 0) continue;
-      let timeText = '';
-      if (days === '0') {
-        timeText = 'HARI INI';
-      } else if (days === '1') {
-        timeText = 'BESOK';
-      } else {
-        timeText = `dalam ${days} hari lagi`;
-      }
-      const bodyMessage = `Halo, jangan lupa ${timeText} ada ${customerCount} pelanggan yang harus kamu hubungi.`;
-      console.log(`MENGIRIM NOTIFIKASI GABUNGAN: ${bodyMessage}`);
-      new Notification({
-        title: 'Pengingat Jadwal Servis',
-        body: bodyMessage
-      }).show();
-    }
-
-    // Kirim notifikasi untuk JADWAL SERVIS yang terlewat
-    if (serviceDateOverdueCustomers.length > 0) {
-      const customerCount = serviceDateOverdueCustomers.length;
-      const bodyMessage = `Perhatian, ada ${customerCount} pelanggan yang JADWAL SERVISNYA TERLEWAT dan belum dihubungi.`;
-      console.log(`MENGIRIM NOTIFIKASI JADWAL TERLEWAT: ${bodyMessage}`);
-      new Notification({
-        title: 'Pengingat Jadwal Terlewat',
-        body: bodyMessage
-      }).show();
-    }
-
-    // Kirim notifikasi untuk KONTAK yang terlambat
-    if (contactOverdueCustomers.length > 0) {
-      const customerCount = contactOverdueCustomers.length;
-      const bodyMessage = `Perhatian, ada ${customerCount} pelanggan yang TERLAMBAT dihubungi. Segera tindak lanjuti.`;
-      console.log(`MENGIRIM NOTIFIKASI KONTAK TERLAMBAT: ${bodyMessage}`);
-      new Notification({
-        title: 'Pengingat Kontak Terlambat',
-        body: bodyMessage
-      }).show();
-    }
-
-  } catch (error) {
-    console.error('Gagal memeriksa jadwal untuk notifikasi:', error);
-  }
-}
-
 // --- Main Window & App Lifecycle ---
 const createWindow = () => {
   const mainWindow = new BrowserWindow({
-    width: 1200, height: 800,
-    webPreferences: { preload: path.join(__dirname, './src/preload.js') },
+    width: 1200,
+    height: 800,
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+    },
   });
-
-  // Pastikan variabel ini didefinisikan atau gunakan nilai default
-  const isDev = process.env.NODE_ENV === 'development';
-  if (isDev && process.env.VITE_DEV_SERVER_URL) {
-    mainWindow.loadURL(process.env.VITE_DEV_SERVER_URL);
-  } else {
-    mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
-  }
-
-  if (isDev) mainWindow.webContents.openDevTools();
+  mainWindow.loadFile('index.html');
 };
 
-// TAMBAHKAN FUNGSI INI - INI YANG HILANG
 const createReminderWindow = (sheetId, sheetName) => {
   const reminderWindow = new BrowserWindow({
     width: 1400,
     height: 900,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
-      nodeIntegration: false,
-      contextIsolation: true
     },
     title: `Reminder - ${sheetName}`
   });
 
-  // Load reminder.html (tampilan database)
-  const isDev = process.env.NODE_ENV === 'development';
+  reminderWindow.loadFile('reminder.html');
 
-  if (isDev && process.env.VITE_DEV_SERVER_URL) {
-    // Mode development dengan Vite server
-    reminderWindow.loadURL(`${process.env.VITE_DEV_SERVER_URL}/reminder.html`);
-    console.log('Development mode: Loading reminder from Vite server');
-  } else {
-    // Mode production - load dari file
-    const reminderHtmlPath = path.join(__dirname, '..', 'reminder.html');
-    console.log('Production mode: Loading reminder from', reminderHtmlPath);
-    reminderWindow.loadFile(reminderHtmlPath).catch(err => {
-      console.error('Failed to load reminder HTML:', err);
-    });
-  }
-
-  // Kirim data sheet ke window reminder saat sudah siap
   reminderWindow.webContents.once('did-finish-load', () => {
     reminderWindow.webContents.send('load-sheet', { id: sheetId, name: sheetName });
-    console.log('Sent sheet data to reminder window:', { id: sheetId, name: sheetName });
   });
-
-  if (isDev) {
-    reminderWindow.webContents.openDevTools();
-  }
 };
 
 app.whenReady().then(() => {
   createWindow();
-  checkUpcomingServices();
-  setInterval(checkUpcomingServices, 3600 * 1000);
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
@@ -383,27 +276,26 @@ ipcMain.on('open-reminder-for-sheet', (event, { id, name }) => {
   createReminderWindow(id, name);
 });
 
-ipcMain.handle('refresh-data', async () => {
+ipcMain.handle('refresh-data', async (event, spreadsheetId) => {
   try {
-    const data = await getDataFromSheets();
+    const data = await getDataFromSheets(spreadsheetId);
     return { success: true, data };
   } catch (error) {
     return { success: false, error: error.message };
   }
 });
 
-ipcMain.handle('add-customer', async (event, customerData) => {
+ipcMain.handle('add-customer', async (event, { spreadsheetId, customerData }) => {
   try {
-    const { customerSheet, serviceSheet } = await getSheets();
+    const { customerSheet, serviceSheet } = await getSheets(spreadsheetId);
     const installationDate = new Date(customerData.nextService);
     if (isNaN(installationDate.getTime())) {
       throw new Error('Tanggal pemasangan tidak valid.');
     }
     const installationDateString = installationDate.toISOString().split('T')[0];
 
-    // Generate Customer ID using global sequence
     const datePart = formatDateToYYYYMMDD(installationDate);
-    const nextSequence = await getNextGlobalSequence();
+    const nextSequence = await getNextGlobalSequence(spreadsheetId);
     const sequencePart = String(nextSequence).padStart(5, '0');
     const newCustomerId = `CUST-${datePart}${sequencePart}`;
 
@@ -414,10 +306,10 @@ ipcMain.handle('add-customer', async (event, customerData) => {
       'No Telp': customerData.phone,
       Kota: customerData.kota,
       'Pemasangan': installationDateString,
-      'Notes Pelanggan': customerData.customerNotes || '', // Tambahkan default value
+      'Notes Pelanggan': customerData.customerNotes || '',
     });
 
-    const installationServiceId = await generateNewServiceId(installationDate);
+    const installationServiceId = await generateNewServiceId(spreadsheetId, installationDate);
     await serviceSheet.addRow({
       ServiceID: installationServiceId,
       CustomerID: newCustomerId,
@@ -430,7 +322,7 @@ ipcMain.handle('add-customer', async (event, customerData) => {
     const reminderDate = new Date(installationDate);
     reminderDate.setMonth(reminderDate.getMonth() + 6);
     const reminderDateString = reminderDate.toISOString().split('T')[0];
-    const reminderServiceId = await generateNewServiceId(reminderDate);
+    const reminderServiceId = await generateNewServiceId(spreadsheetId, reminderDate);
     await serviceSheet.addRow({
       ServiceID: reminderServiceId,
       CustomerID: newCustomerId,
@@ -447,12 +339,11 @@ ipcMain.handle('add-customer', async (event, customerData) => {
   }
 });
 
-ipcMain.handle('update-contact-status', async (event, { serviceID, newStatus, notes, postponeDuration, refusalFollowUp }) => {
+ipcMain.handle('update-contact-status', async (event, { spreadsheetId, serviceID, newStatus, notes, postponeDuration, refusalFollowUp }) => {
   try {
-    const { serviceSheet } = await getSheets();
+    const { serviceSheet } = await getSheets(spreadsheetId);
     const rows = await serviceSheet.getRows();
 
-    // Logika yang lebih baik untuk menemukan baris yang akan diupdate
     const triggeredRow = rows.find(r => r.get('ServiceID') === serviceID);
     if (!triggeredRow) throw new Error('Service record pemicu tidak ditemukan.');
     const customerId = triggeredRow.get('CustomerID');
@@ -464,15 +355,15 @@ ipcMain.handle('update-contact-status', async (event, { serviceID, newStatus, no
     let rowToUpdate = upcomingServices.length > 0 ? upcomingServices[0] : triggeredRow;
 
     if (newStatus === 'CONTACTED') {
-      const completionDate = new Date().toISOString().split('T')[0];
       rowToUpdate.set('Status', 'COMPLETED');
       rowToUpdate.set('Notes', notes);
-      rowToUpdate.set('ServiceDate', completionDate);
       await rowToUpdate.save();
 
-      const nextServiceDate = new Date();
+      const completedServiceDate = new Date(rowToUpdate.get('ServiceDate'));
+      const nextServiceDate = new Date(completedServiceDate);
       nextServiceDate.setMonth(nextServiceDate.getMonth() + 6);
-      const nextServiceId = await generateNewServiceId(nextServiceDate);
+
+      const nextServiceId = await generateNewServiceId(spreadsheetId, nextServiceDate);
       await serviceSheet.addRow({
         ServiceID: nextServiceId,
         CustomerID: customerId,
@@ -481,15 +372,10 @@ ipcMain.handle('update-contact-status', async (event, { serviceID, newStatus, no
         Notes: 'Jadwal servis rutin berikutnya',
         Handler: rowToUpdate.get('Handler'),
       });
-
     } else if (newStatus === 'OVERDUE') {
-      const nextAttemptDate = new Date();
-      nextAttemptDate.setDate(nextAttemptDate.getDate() + 7);
       rowToUpdate.set('Status', 'OVERDUE');
-      rowToUpdate.set('ServiceDate', nextAttemptDate.toISOString().split('T')[0]);
       rowToUpdate.set('Notes', notes);
       await rowToUpdate.save();
-
     } else if (newStatus === 'POSTPONED') {
       const newDate = new Date();
       switch (postponeDuration) {
@@ -498,42 +384,28 @@ ipcMain.handle('update-contact-status', async (event, { serviceID, newStatus, no
         case '3m': newDate.setMonth(newDate.getMonth() + 3); break;
         case '6m': newDate.setMonth(newDate.getMonth() + 6); break;
       }
-
-      // Status kembali menjadi UPCOMING dengan tanggal baru
       rowToUpdate.set('Status', 'UPCOMING');
       rowToUpdate.set('ServiceDate', newDate.toISOString().split('T')[0]);
       rowToUpdate.set('Notes', notes);
       await rowToUpdate.save();
-
     } else if (newStatus === 'REFUSED') {
       if (upcomingServices.length === 0) {
-        // Jika tidak ada jadwal mendatang, cukup catat penolakan di servis terakhir
         triggeredRow.set('Notes', notes);
         await triggeredRow.save();
         return { success: true };
       }
-
-      const rowToModify = upcomingServices[0]; // Selalu modifikasi jadwal mendatang
-
+      const rowToModify = upcomingServices[0];
       if (refusalFollowUp === 'never') {
-        // Hapus jadwal servis mendatang
         await rowToModify.delete();
       } else {
-        // Perbarui tanggal servis mendatang
         const newDate = new Date();
-        if (refusalFollowUp === '1y') {
-          newDate.setFullYear(newDate.getFullYear() + 1);
-        } else if (refusalFollowUp === '2y') {
-          newDate.setFullYear(newDate.getFullYear() + 2);
-        }
-
+        if (refusalFollowUp === '1y') newDate.setFullYear(newDate.getFullYear() + 1);
+        else if (refusalFollowUp === '2y') newDate.setFullYear(newDate.getFullYear() + 2);
         rowToModify.set('ServiceDate', newDate.toISOString().split('T')[0]);
         rowToModify.set('Notes', notes);
-        // Status tetap UPCOMING untuk pengingat di masa depan
         rowToModify.set('Status', 'UPCOMING');
         await rowToModify.save();
       }
-
     } else {
       rowToUpdate.set('Status', newStatus);
       rowToUpdate.set('Notes', notes);
@@ -546,14 +418,12 @@ ipcMain.handle('update-contact-status', async (event, { serviceID, newStatus, no
   }
 });
 
-ipcMain.handle('update-history-note', async (event, { serviceID, newNotes, newHandler }) => {
+ipcMain.handle('update-history-note', async (event, { spreadsheetId, serviceID, newNotes, newHandler }) => {
   try {
-    const { serviceSheet } = await getSheets();
+    const { serviceSheet } = await getSheets(spreadsheetId);
     const rows = await serviceSheet.getRows();
     const rowToUpdate = rows.find(r => r.get('ServiceID') === serviceID);
-    if (!rowToUpdate) {
-      throw new Error('Catatan riwayat servis tidak ditemukan.');
-    }
+    if (!rowToUpdate) throw new Error('Catatan riwayat servis tidak ditemukan.');
     rowToUpdate.set('Notes', newNotes);
     rowToUpdate.set('Handler', newHandler);
     await rowToUpdate.save();
@@ -564,19 +434,19 @@ ipcMain.handle('update-history-note', async (event, { serviceID, newNotes, newHa
   }
 });
 
-ipcMain.handle('update-service', async (event, { serviceID, newDate, newHandler }) => {
+ipcMain.handle('update-service', async (event, { spreadsheetId, serviceID, newDate, newHandler }) => {
   try {
-    const { serviceSheet } = await getSheets();
+    const { serviceSheet } = await getSheets(spreadsheetId);
     const rows = await serviceSheet.getRows();
     const triggeredRow = rows.find(r => r.get('ServiceID') === serviceID);
-    if (!triggeredRow) {
-      throw new Error('Service record pemicu tidak ditemukan.');
-    }
+    if (!triggeredRow) throw new Error('Service record pemicu tidak ditemukan.');
+
     const customerID = triggeredRow.get('CustomerID');
     const customerServices = rows.filter(r => r.get('CustomerID') === customerID);
     const upcomingServices = customerServices
       .filter(r => r.get('Status') === 'UPCOMING')
       .sort((a, b) => new Date(a.get('ServiceDate')) - new Date(b.get('ServiceDate')));
+
     if (upcomingServices.length === 0) {
       throw new Error('Tidak ada jadwal servis UPCOMING yang ditemukan untuk pelanggan ini.');
     }
@@ -591,9 +461,9 @@ ipcMain.handle('update-service', async (event, { serviceID, newDate, newHandler 
   }
 });
 
-ipcMain.handle('update-customer', async (event, { customerID, updatedData }) => {
+ipcMain.handle('update-customer', async (event, { spreadsheetId, customerID, updatedData }) => {
   try {
-    const { customerSheet } = await getSheets();
+    const { customerSheet } = await getSheets(spreadsheetId);
     const rows = await customerSheet.getRows();
     const rowToUpdate = rows.find(r => r.get('CustomerID') === customerID);
     if (!rowToUpdate) throw new Error('Customer not found.');
@@ -601,10 +471,8 @@ ipcMain.handle('update-customer', async (event, { customerID, updatedData }) => 
     rowToUpdate.set('Nama', updatedData.name);
     rowToUpdate.set('Alamat', updatedData.address);
     rowToUpdate.set('No Telp', updatedData.phone);
-    if (updatedData.kota) {
-      rowToUpdate.set('Kota', updatedData.kota);
-    }
-    rowToUpdate.set('Notes Pelanggan', updatedData.customerNotes || ''); // Tambahkan default value
+    rowToUpdate.set('Kota', updatedData.kota);
+    rowToUpdate.set('Notes Pelanggan', updatedData.customerNotes || '');
 
     await rowToUpdate.save();
     return { success: true };
@@ -613,15 +481,15 @@ ipcMain.handle('update-customer', async (event, { customerID, updatedData }) => 
   }
 });
 
-ipcMain.handle('delete-customer', async (event, customerID) => {
+ipcMain.handle('delete-customer', async (event, { spreadsheetId, customerID }) => {
   try {
-    const { customerSheet, serviceSheet } = await getSheets();
+    const { customerSheet, serviceSheet } = await getSheets(spreadsheetId);
 
     const deleteWithRetry = async (row, maxRetries = 3) => {
       for (let attempt = 1; attempt <= maxRetries; attempt++) {
         try {
           await row.delete();
-          return true;
+          return;
         } catch (error) {
           if (attempt === maxRetries) throw error;
           console.warn(`Attempt ${attempt} failed, retrying...`);
@@ -655,10 +523,11 @@ ipcMain.handle('delete-customer', async (event, customerID) => {
 ipcMain.handle('open-whatsapp', (event, phone) => {
   if (!phone) return;
   const cleanPhone = phone.replace(/\D/g, '');
-  shell.openExternal(`https://wa.me/${cleanPhone}`);
+  const internationalPhone = cleanPhone.startsWith('62') ? cleanPhone : '62' + cleanPhone.substring(1);
+  shell.openExternal(`https://wa.me/${internationalPhone}`);
 });
 
-ipcMain.handle('export-data', async () => {
+ipcMain.handle('export-data', async (spreadsheetId) => {
   const saveDialogResult = await dialog.showSaveDialog({
     title: 'Pilih Lokasi dan Nama File Ekspor',
     defaultPath: `export-data-pelanggan-${new Date().toISOString().split('T')[0]}`,
@@ -679,7 +548,7 @@ ipcMain.handle('export-data', async () => {
   let tempFilePath = null;
 
   try {
-    const dataFromSheets = await getFlatDataForExport();
+    const dataFromSheets = await getFlatDataForExport(spreadsheetId);
     const dataString = JSON.stringify(dataFromSheets);
 
     tempFilePath = path.join(os.tmpdir(), `export-data-${Date.now()}.json`);
