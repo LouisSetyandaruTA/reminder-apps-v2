@@ -215,6 +215,83 @@ async function getFlatDataForExport(spreadsheetId) {
   return flatData;
 }
 
+// --- FUNGSI NOTIFIKASI ---
+async function checkUpcomingServices() {
+  if (!Notification.isSupported()) {
+    console.log('Sistem notifikasi tidak didukung pada OS ini.');
+    return;
+  }
+  console.log('Memeriksa jadwal untuk notifikasi...');
+
+  const databases = readDatabases();
+  if (databases.length === 0) {
+    console.log('Tidak ada database yang dikonfigurasi, notifikasi dilewati.');
+    return;
+  }
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  let allUpcomingServices = [];
+  let allOverdueServices = [];
+  let allContactOverdue = [];
+
+  for (const db of databases) {
+    try {
+      const data = await getDataFromSheets(db.id);
+
+      data.forEach(customer => {
+        if (customer.nextService && customer.status === 'UPCOMING') {
+          const nextServiceDate = new Date(customer.nextService);
+          nextServiceDate.setHours(0, 0, 0, 0);
+          if (isNaN(nextServiceDate.getTime())) return;
+
+          const timeDiff = nextServiceDate.getTime() - today.getTime();
+          const daysDiff = Math.ceil(timeDiff / (1000 * 3600 * 24));
+
+          if (daysDiff >= 0 && daysDiff <= 7) { // Reminder untuk 7 hari ke depan
+            allUpcomingServices.push({ name: customer.name, days: daysDiff });
+          } else if (daysDiff < 0) {
+            allOverdueServices.push({ name: customer.name });
+          }
+        }
+        if (customer.status === 'OVERDUE') {
+          allContactOverdue.push({ name: customer.name });
+        }
+      });
+    } catch (error) {
+      console.error(`Gagal memeriksa notifikasi untuk database '${db.name}':`, error.message);
+    }
+  }
+
+  // Kelompokkan notifikasi agar tidak spam
+  const upcomingGroups = {};
+  allUpcomingServices.forEach(s => {
+      if (!upcomingGroups[s.days]) upcomingGroups[s.days] = [];
+      upcomingGroups[s.days].push(s.name);
+  });
+
+  for (const days in upcomingGroups) {
+      const customerCount = upcomingGroups[days].length;
+      if (customerCount === 0) continue;
+      
+      let timeText = (days === '0') ? 'HARI INI' : (days === '1' ? 'BESOK' : `dalam ${days} hari`);
+      const bodyMessage = `Ada ${customerCount} pelanggan dengan jadwal servis ${timeText}.`;
+      
+      new Notification({ title: 'Pengingat Jadwal Servis', body: bodyMessage }).show();
+  }
+
+  if (allOverdueServices.length > 0) {
+    const bodyMessage = `Perhatian, ada ${allOverdueServices.length} pelanggan yang jadwal servisnya terlewat.`;
+    new Notification({ title: 'Jadwal Servis Terlewat!', body: bodyMessage }).show();
+  }
+
+  if (allContactOverdue.length > 0) {
+    const bodyMessage = `Ada ${allContactOverdue.length} pelanggan berstatus "tidak bisa dihubungi".`;
+    new Notification({ title: 'Kontak Perlu Follow Up', body: bodyMessage }).show();
+  }
+}
+
 // --- Main Window & App Lifecycle ---
 const createWindow = () => {
   const mainWindow = new BrowserWindow({
@@ -246,6 +323,10 @@ const createReminderWindow = (sheetId, sheetName) => {
 
 app.whenReady().then(() => {
   createWindow();
+  
+  checkUpcomingServices();
+  setInterval(checkUpcomingServices, 3600 * 1000);
+
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
