@@ -527,180 +527,148 @@ ipcMain.handle('open-whatsapp', (event, phone) => {
   shell.openExternal(`https://wa.me/${internationalPhone}`);
 });
 
-ipcMain.handle('export-data', async (spreadsheetId) => {
+ipcMain.handle('export-data', async (event, spreadsheetId) => {
   const saveDialogResult = await dialog.showSaveDialog({
-    title: 'Pilih Lokasi dan Nama File Ekspor',
-    defaultPath: `export-data-pelanggan-${new Date().toISOString().split('T')[0]}`,
-    filters: [
-      { name: 'Excel Files', extensions: ['xlsx'] },
-      { name: 'CSV Files', extensions: ['csv'] },
-    ]
+    title: 'Pilih Lokasi dan Nama Dasar untuk File Ekspor',
+    defaultPath: `export-data-${formatDateToYYYYMMDD(new Date())}`,
+    // Menghilangkan filter agar pengguna fokus pada nama dasar.
+    // Skrip Python akan menambahkan ekstensi .xlsx dan .csv secara otomatis.
   });
 
   if (saveDialogResult.canceled || !saveDialogResult.filePath) {
     return { success: false, error: 'Proses ekspor dibatalkan.' };
   }
 
-  const fullPath = saveDialogResult.filePath;
-  const parsedPath = path.parse(fullPath);
-  const basePath = path.join(parsedPath.dir, parsedPath.name);
-
-  let tempFilePath = null;
+  // FilePath dari dialog akan menjadi nama dasar.
+  const baseOutputPath = saveDialogResult.filePath;
+  let tempJsonPath = null;
 
   try {
-    const dataFromSheets = await getFlatDataForExport(spreadsheetId);
-    const dataString = JSON.stringify(dataFromSheets);
-
-    tempFilePath = path.join(os.tmpdir(), `export-data-${Date.now()}.json`);
-    fs.writeFileSync(tempFilePath, dataString, 'utf-8');
+    const dataToExport = await getFlatDataForExport(spreadsheetId);
+    tempJsonPath = path.join(os.tmpdir(), `export-${Date.now()}.json`);
+    fs.writeFileSync(tempJsonPath, JSON.stringify(dataToExport, null, 2));
 
     const isPackaged = app.isPackaged;
-
-    const scriptName = 'export_data.py';
-    const executableName = process.platform === 'win32' ? 'export_data.exe' : 'export_data';
-
     const scriptPath = isPackaged
       ? path.join(process.resourcesPath, 'scripts')
-      : path.join(__dirname, '..', '..', 'scripts');
+      : 'scripts'; // Path relatif dari root proyek saat development
 
-    let options;
+    const pythonExecutable = isPackaged ? null : (process.platform === 'win32' ? 'venv\\Scripts\\python.exe' : 'venv/bin/python');
+    const scriptFile = 'export_data.py';
+    
+    console.log(`Running export script. Packaged: ${isPackaged}`);
+    console.log(`Script path: ${path.join(scriptPath, scriptFile)}`);
+    console.log(`Python path: ${pythonExecutable}`);
 
-    if (isPackaged) {
-      const executablePath = path.join(scriptPath, executableName);
-      options = {
-        mode: 'text',
-        args: [tempFilePath, basePath]
-      };
-      await new Promise((resolve, reject) => {
-        const { spawn } = require('node:child_process');
-        const process = spawn(executablePath, options.args);
-        let stderr = '';
+    const options = {
+      mode: 'text',
+      scriptPath: scriptPath,
+      args: [tempJsonPath, baseOutputPath], // Kirim baseOutputPath ke skrip Python
+      ...(pythonExecutable && { pythonPath: pythonExecutable })
+    };
 
-        process.stdout.on('data', (data) => {
-          console.log(`stdout: ${data}`);
-        });
+    await PythonShell.run(scriptFile, options);
 
-        process.stderr.on('data', (data) => {
-          console.error(`stderr: ${data}`);
-          stderr += data.toString();
-        });
-
-        process.on('close', (code) => {
-          if (code !== 0) {
-            console.error(`Process exited with code ${code}`);
-            reject(new Error(stderr || `Proses ekspor gagal dengan kode: ${code}`));
-          } else {
-            resolve();
-          }
-        });
-      });
-
-    } else {
-      const pythonExecutable = process.platform === 'win32'
-        ? path.join(__dirname, '..', '..', 'venv', 'Scripts', 'python.exe')
-        : 'python3';
-
-      options = {
-        mode: 'text',
-        pythonPath: pythonExecutable,
-        scriptPath: scriptPath,
-        args: [tempFilePath, basePath]
-      };
-      await PythonShell.run(scriptName, options);
-    }
-
-    return { success: true, path: `${basePath}.xlsx dan .csv` };
+    const finalXlsxPath = `${baseOutputPath}.xlsx`;
+    const finalCsvPath = `${baseOutputPath}.csv`;
+    // Mengembalikan pesan sukses yang jelas
+    return { success: true, path: `File berhasil disimpan di:\n${finalXlsxPath}\ndan\n${finalCsvPath}` };
   } catch (err) {
     console.error('Gagal menjalankan proses ekspor:', err);
-    return { success: false, error: err.message || 'Terjadi kesalahan tidak diketahui saat ekspor.' };
+    dialog.showErrorBox('Ekspor Gagal', `Terjadi kesalahan saat mengekspor data:\n${err.message}`);
+    return { success: false, error: err.message };
   } finally {
-    if (tempFilePath && fs.existsSync(tempFilePath)) {
-      fs.unlinkSync(tempFilePath);
+    if (tempJsonPath && fs.existsSync(tempJsonPath)) {
+      fs.unlinkSync(tempJsonPath);
     }
   }
 });
 
-ipcMain.handle('import-data', async () => {
-  const tempDir = app.getPath('userData');
+// --- PERBAIKAN FUNGSI IMPOR ---
+ipcMain.handle('import-data', async (event, spreadsheetId) => {
+  const openDialogResult = await dialog.showOpenDialog({
+    title: 'Pilih File untuk Diimpor',
+    properties: ['openFile'],
+    filters: [{ name: 'Excel atau CSV', extensions: ['xlsx', 'csv'] }]
+  });
+
+  if (openDialogResult.canceled || !openDialogResult.filePaths[0]) {
+    return { success: false, error: 'Proses impor dibatalkan.' };
+  }
+  const inputFile = openDialogResult.filePaths[0];
+  const tempDir = path.join(app.getPath('userData'), 'temp-import');
+  if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
+
   const customersPath = path.join(tempDir, 'customers_to_import.csv');
   const servicesPath = path.join(tempDir, 'services_to_import.csv');
+
   try {
-    const openDialogResult = await dialog.showOpenDialog({
-      title: 'Pilih File untuk Diimpor',
-      properties: ['openFile'],
-      filters: [{ name: 'Spreadsheet Files', extensions: ['xlsx', 'csv'] }]
-    });
-    if (openDialogResult.canceled || !openDialogResult.filePaths[0]) {
-      return { success: false, error: 'Proses impor dibatalkan.' };
-    }
-    const inputFile = openDialogResult.filePaths[0];
-
+    // 1. Jalankan skrip Python untuk memproses file input
     const isPackaged = app.isPackaged;
-    const scriptResourcePath = isPackaged
-      ? path.join(process.resourcesPath, 'scripts')
-      : path.join(__dirname, '..', '..', 'scripts');
+    const scriptPath = isPackaged ? path.join(process.resourcesPath, 'scripts') : 'scripts';
+    const pythonExecutable = isPackaged ? null : (process.platform === 'win32' ? 'venv\\Scripts\\python.exe' : 'venv/bin/python');
+    const scriptFile = 'import_data.py';
 
-    const pythonExecutable = process.platform === 'win32'
-      ? path.join(__dirname, '..', '..', 'venv', 'Scripts', 'python.exe')
-      : 'python3';
-
-    const pyOptions = {
+    const options = {
       mode: 'text',
-      pythonPath: pythonExecutable,
-      scriptPath: scriptResourcePath,
-      args: [inputFile, tempDir]
+      scriptPath: scriptPath,
+      args: [inputFile, tempDir],
+      ...(pythonExecutable && { pythonPath: pythonExecutable })
     };
-    await PythonShell.run('import_data.py', pyOptions);
 
+    await PythonShell.run(scriptFile, options);
+
+    // 2. Baca hasil CSV dari skrip Python
     const customersToImport = [];
     const servicesToImport = [];
     await new Promise((resolve, reject) => fs.createReadStream(customersPath).pipe(csv()).on('data', (row) => customersToImport.push(row)).on('end', resolve).on('error', reject));
     await new Promise((resolve, reject) => fs.createReadStream(servicesPath).pipe(csv()).on('data', (row) => servicesToImport.push(row)).on('end', resolve).on('error', reject));
 
-    const { customerSheet, serviceSheet } = await getSheets();
-    const existingServRows = await serviceSheet.getRows();
+    // 3. Dapatkan data yang ada dari Google Sheet untuk menghindari duplikasi ID
+    // PERBAIKAN KRUSIAL: Menggunakan spreadsheetId yang aktif
+    const { customerSheet, serviceSheet } = await getSheets(spreadsheetId);
     const existingCustRows = await customerSheet.getRows();
+    const existingServRows = await serviceSheet.getRows();
 
-    const existingCustomerIds = new Set(existingCustRows.map(r => r.get('CustomerID')));
     let lastCustSeq = 0;
-    existingCustomerIds.forEach(id => {
+    existingCustRows.forEach(r => {
+      const id = r.get('CustomerID');
       if (id && id.startsWith('CUST-')) {
         const seq = parseInt(id.slice(-5));
-        if (seq > lastCustSeq) lastCustSeq = seq;
+        if (!isNaN(seq) && seq > lastCustSeq) lastCustSeq = seq;
       }
     });
 
     const latestServSequenceForDay = new Map();
-    existingServRows.map(r => r.get('ServiceID')).forEach(id => {
+    existingServRows.forEach(r => {
+      const id = r.get('ServiceID');
       if (id && id.startsWith('SVC-')) {
         const datePart = id.substring(4, 12);
         const seqPart = parseInt(id.slice(-5), 10);
         const currentMax = latestServSequenceForDay.get(datePart) || 0;
-        if (seqPart > currentMax) {
+        if (!isNaN(seqPart) && seqPart > currentMax) {
           latestServSequenceForDay.set(datePart, seqPart);
         }
       }
     });
 
+    // 4. Proses dan tambahkan data baru
     const newCustomerRows = [];
-    const customerMap = new Map();
-
+    const customerMap = new Map(); // map nama pelanggan ke ID baru
     customersToImport.forEach(c => {
       lastCustSeq++;
       const purchaseDate = new Date(c.purchaseDate);
       const datePart = formatDateToYYYYMMDD(purchaseDate);
       const sequencePart = String(lastCustSeq).padStart(5, '0');
       const newId = `CUST-${datePart}${sequencePart}`;
-      const newRow = {
+      newCustomerRows.push({
         CustomerID: newId, Nama: c.name, Alamat: c.address,
         'No Telp': c.phone, Kota: c.kota, 'Pemasangan': c.purchaseDate,
-      };
-      newCustomerRows.push(newRow);
+      });
       customerMap.set(c.name, newId);
     });
 
     const allNewServiceRows = [];
-
     servicesToImport.forEach(s => {
       const customerId = customerMap.get(s.name);
       if (!customerId) return;
@@ -715,33 +683,39 @@ ipcMain.handle('import-data', async () => {
       });
     });
 
-    const latestServiceMap = new Map(customersToImport.map(c => [c.name, c.latest_service]));
-    customersToImport.forEach(c => {
-      const customerId = customerMap.get(c.name);
-      if (!customerId || !latestServiceMap.get(c.name)) return;
-      const lastServiceDate = new Date(latestServiceMap.get(c.name));
-      lastServiceDate.setMonth(lastServiceDate.getMonth() + 6);
-      const reminderDateString = lastServiceDate.toISOString().split('T')[0];
-      const datePart = formatDateToYYYYMMDD(lastServiceDate);
+    // Buat jadwal reminder berikutnya untuk setiap pelanggan yang diimpor
+    const latestServiceMap = new Map();
+    servicesToImport.forEach(s => {
+      const currentLatest = latestServiceMap.get(s.name) || new Date(0);
+      const serviceDate = new Date(s.serviceDate);
+      if (serviceDate > currentLatest) {
+        latestServiceMap.set(s.name, serviceDate);
+      }
+    });
+
+    latestServiceMap.forEach((lastServiceDate, customerName) => {
+      const customerId = customerMap.get(customerName);
+      if (!customerId) return;
+      const reminderDate = new Date(lastServiceDate);
+      reminderDate.setMonth(reminderDate.getMonth() + 6);
+      const datePart = formatDateToYYYYMMDD(reminderDate);
       const nextSeq = (latestServSequenceForDay.get(datePart) || 0) + 1;
       latestServSequenceForDay.set(datePart, nextSeq);
       const serviceId = `SVC-${datePart}${String(nextSeq).padStart(5, '0')}`;
       allNewServiceRows.push({
-        ServiceID: serviceId, CustomerID: customerId, ServiceDate: reminderDateString,
+        ServiceID: serviceId, CustomerID: customerId, ServiceDate: reminderDate.toISOString().split('T')[0],
         Status: 'UPCOMING', Notes: 'Jadwal servis rutin berikutnya',
       });
     });
 
-    if (newCustomerRows.length > 0) {
-      await customerSheet.addRows(newCustomerRows);
-    }
-    if (allNewServiceRows.length > 0) {
-      await serviceSheet.addRows(allNewServiceRows);
-    }
+    // 5. Kirim data baru ke Google Sheets
+    if (newCustomerRows.length > 0) await customerSheet.addRows(newCustomerRows);
+    if (allNewServiceRows.length > 0) await serviceSheet.addRows(allNewServiceRows);
 
-    return { success: true, message: `Berhasil mengimpor ${customersToImport.length} pelanggan.` };
+    return { success: true, message: `Berhasil mengimpor ${customersToImport.length} pelanggan baru.` };
   } catch (error) {
-    console.error('Gagal melakukan impor (Blok Catch):', error);
+    console.error('Gagal melakukan impor:', error);
+    dialog.showErrorBox('Impor Gagal', `Terjadi kesalahan saat mengimpor data:\n${error.message}`);
     return { success: false, error: error.message };
   } finally {
     if (fs.existsSync(customersPath)) fs.unlinkSync(customersPath);
