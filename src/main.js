@@ -562,11 +562,21 @@ ipcMain.handle('update-customer', async (event, { spreadsheetId, customerID, upd
     const rowToUpdate = rows.find(r => r.get('CustomerID') === customerID);
     if (!rowToUpdate) throw new Error('Customer not found.');
 
-    rowToUpdate.set('Nama', updatedData.name);
-    rowToUpdate.set('Alamat', updatedData.address);
-    rowToUpdate.set('No Telp', updatedData.phone);
-    rowToUpdate.set('Kota', formatCityName(updatedData.kota)); // PERBAIKAN DI SINI
-    rowToUpdate.set('Notes Pelanggan', updatedData.customerNotes || '');
+    if (updatedData.name !== undefined) {
+      rowToUpdate.set('Nama', updatedData.name);
+    }
+    if (updatedData.address !== undefined) {
+      rowToUpdate.set('Alamat', updatedData.address);
+    }
+    if (updatedData.phone !== undefined) {
+      rowToUpdate.set('No Telp', updatedData.phone);
+    }
+    if (updatedData.kota !== undefined) {
+      rowToUpdate.set('Kota', formatCityName(updatedData.kota));
+    }
+    if (updatedData.customerNotes !== undefined) {
+      rowToUpdate.set('Notes Pelanggan', updatedData.customerNotes || '');
+    }
 
     await rowToUpdate.save();
     return { success: true };

@@ -94,7 +94,10 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
 
-    const showLoading = () => loadingIndicator.classList.remove('hidden');
+    const showLoading = () => {
+        modals.forEach(closeModal);
+        loadingIndicator.classList.remove('hidden');
+    };
     const hideLoading = () => loadingIndicator.classList.add('hidden');
 
     const updateViewButtons = () => {
@@ -181,30 +184,55 @@ document.addEventListener('DOMContentLoaded', () => {
         cityFilterSelect.value = selectedValue;
     }
 
-    function showCustomerNotes(customer) {
-        const modalName = document.getElementById('notes-modal-customer-name');
+    // --- LOGIKA BARU UNTUK MODAL CATATAN ---
+
+    // Fungsi ini hanya mengubah UI antara mode lihat dan mode edit
+    function setNotesModalMode(mode) {
+        const viewContainer = document.getElementById('notes-view-container');
+        const editContainer = document.getElementById('notes-edit-container');
+        const viewActions = document.getElementById('notes-view-actions');
+        const editActions = document.getElementById('notes-edit-actions');
+
+        if (mode === 'edit') {
+            viewContainer.classList.add('hidden');
+            editContainer.classList.remove('hidden');
+            viewActions.classList.add('hidden');
+            editActions.classList.remove('hidden');
+        } else { // mode 'view'
+            viewContainer.classList.remove('hidden');
+            editContainer.classList.add('hidden');
+            viewActions.classList.remove('hidden');
+            editActions.classList.add('hidden');
+        }
+    }
+
+    // Fungsi untuk menampilkan catatan dalam format poin-poin
+    function updateNotesModalContent(customer) {
+        selectedCustomer = customer; // Selalu update customer terpilih
         const modalContent = document.getElementById('notes-modal-content');
-
-        modalName.textContent = customer.name;
-
         const notes = customer.customerNotes || '';
 
         if (notes.trim()) {
-            const notesArray = notes.split('\n').filter(line => line.trim() !== '');
-            modalContent.innerHTML = `
-                <ul class="list-disc pl-5 space-y-2">
-                    ${notesArray.map(note => `<li>${note.trim()}</li>`).join('')}
-                </ul>
-            `;
+            // Pisahkan catatan per baris baru
+            modalContent.innerHTML = notes.split('\n')
+                .filter(line => line.trim() !== '')
+                // PERBAIKAN: Tambahkan bullet point (•) di awal setiap baris saat view
+                .map(line => `<p class="my-1">• ${line.trim().replace(/^•\s*/, '')}</p>`)
+                .join('');
         } else {
-            modalContent.innerHTML = `<p class="text-gray-500">Tidak ada catatan untuk pelanggan ini.</p>`;
+            modalContent.innerHTML = `<p class="text-gray-500">Belum ada catatan untuk pelanggan ini.</p>`;
         }
+    }
 
+    // Fungsi utama untuk membuka modal catatan
+    function showCustomerNotes(customer) {
+        document.getElementById('notes-modal-customer-name').textContent = customer.name;
+        setNotesModalMode('view'); // Selalu mulai dalam mode lihat
+        updateNotesModalContent(customer);
         openModal(customerNotesModal);
     }
 
-
-    function showCustomerDetails(customer) {
+    function updateDetailModalContent(customer) {
         selectedCustomer = customer;
         const priority = calculatePriority(customer);
         const contactStatusDisplay = getContactStatusDisplay(customer);
@@ -230,7 +258,7 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('detail-modal-phone').textContent = customer.phone || 'N/A';
         document.getElementById('detail-modal-last-service').textContent = formatDate(mostRecentServiceDate);
         document.getElementById('detail-modal-handler').textContent = customer.handler || 'N/A';
-        document.getElementById('detail-modal-notes').textContent = customer.notes || 'Tidak ada catatan';
+        document.getElementById('detail-modal-notes').textContent = customer.notes || 'Tidak ada catatan servis';
 
         const historyContainer = document.getElementById('detail-modal-history');
         if (allServicesSorted.length > 0) {
@@ -280,6 +308,10 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('detail-modal-delete').dataset.customerName = customer.name;
 
         lucide.createIcons();
+    }
+
+    function showCustomerDetails(customer) {
+        updateDetailModalContent(customer);
         openModal(customerDetailModal);
     }
 
@@ -379,12 +411,58 @@ document.addEventListener('DOMContentLoaded', () => {
             customerListContainer.appendChild(card);
         });
 
+        // =================================================================
+        // === PERBAIKAN LOGIKA STATISTIK DIMULAI DI SINI ===
+        // =================================================================
+
         document.getElementById('stats-total').textContent = customers.length;
         document.getElementById('stats-overdue').textContent = customers.filter(c => calculatePriority(c) === 'Sangat Mendesak').length;
-        document.getElementById('stats-due-month').textContent = customers.filter(c => { if (!c.nextService) return false; const d = new Date(c.nextService); if (isNaN(d.getTime())) return false; const diff = Math.ceil((d - today) / (1000 * 60 * 60 * 24)); return diff >= 0 && diff <= 30; }).length;
-        document.getElementById('stats-contacted').textContent = customers.filter(c => c.status === 'COMPLETED').length;
-        document.getElementById('stats-not-contacted').textContent = customers.filter(c => c.status === 'UPCOMING').length;
+        document.getElementById('stats-due-month').textContent = customers.filter(c => {
+            if (!c.nextService) return false;
+            const d = new Date(c.nextService);
+            if (isNaN(d.getTime())) return false;
+            const diff = Math.ceil((d - today) / (1000 * 60 * 60 * 24));
+            return diff >= 0 && diff <= 30;
+        }).length;
         document.getElementById('stats-contact-overdue').textContent = customers.filter(c => c.status === 'OVERDUE').length;
+
+        // --- Logika Baru untuk "Sudah Dihubungi" ---
+        // Dihitung sebagai "sudah" jika layanan terakhirnya selesai DAN
+        // jadwal berikutnya masih lebih dari 30 hari lagi.
+        const contactedCount = customers.filter(c => {
+            if (!c.nextService) return false; // Harus punya jadwal berikutnya
+
+            // Cek apakah ada layanan yang sudah selesai di masa lalu
+            const hasCompletedService = c.services.some(s => s.status === 'COMPLETED' && new Date(s.date) <= today);
+            if (!hasCompletedService) return false;
+
+            // Cek apakah jadwal berikutnya lebih dari 30 hari dari sekarang
+            const nextServiceDate = new Date(c.nextService);
+            if (isNaN(nextServiceDate.getTime())) return false;
+            const daysDiff = Math.ceil((nextServiceDate - today) / (1000 * 3600 * 24));
+
+            return daysDiff > 30;
+        }).length;
+        document.getElementById('stats-contacted').textContent = contactedCount;
+
+        // --- Logika Baru untuk "Belum Dihubungi" ---
+        // Dihitung sebagai "belum" jika statusnya UPCOMING dan jadwalnya
+        // dalam 30 hari ke depan.
+        const notContactedCount = customers.filter(c => {
+            if (c.status !== 'UPCOMING' || !c.nextService) return false;
+
+            const nextServiceDate = new Date(c.nextService);
+            if (isNaN(nextServiceDate.getTime())) return false;
+            const daysDiff = Math.ceil((nextServiceDate - today) / (1000 * 3600 * 24));
+
+            // Termasuk yang sudah terlewat (daysDiff < 0)
+            return daysDiff <= 30;
+        }).length;
+        document.getElementById('stats-not-contacted').textContent = notContactedCount;
+
+        // =================================================================
+        // === AKHIR DARI PERBAIKAN LOGIKA STATISTIK ===
+        // =================================================================
 
         lucide.createIcons();
     };
@@ -429,13 +507,12 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('update-modal-phone').value = customer.phone;
         document.getElementById('update-modal-address').value = customer.address;
         document.getElementById('update-modal-kota').value = customer.kota || '';
-        document.getElementById('update-modal-customer-notes').value = customer.customerNotes || '';
         openModal(updateCustomerModal);
     }
 
+    // Fungsi generic untuk handle API call yang tidak butuh kembali ke detail
     async function handleApiCall(apiFunction, data, successMessage, errorMessagePrefix) {
         showLoading();
-        modals.forEach(closeModal);
         try {
             const result = await apiFunction(activeSheetId, data);
             if (result.success) {
@@ -513,15 +590,19 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!button) return;
             const action = button.dataset.action;
 
-            if (action !== 'close') {
-                closeModal(customerDetailModal);
-            }
-
             switch (action) {
-                case 'call': window.electronAPI.openWhatsapp(button.dataset.phone); break;
-                case 'update-contact': setupAndOpenContactModal(selectedCustomer); break;
-                case 'update-service': setupAndOpenServiceModal(selectedCustomer); break;
-                case 'edit-customer': setupAndOpenUpdateCustomerModal(selectedCustomer); break;
+                case 'call':
+                    window.electronAPI.openWhatsapp(button.dataset.phone);
+                    break;
+                case 'update-contact':
+                    setupAndOpenContactModal(selectedCustomer);
+                    break;
+                case 'update-service':
+                    setupAndOpenServiceModal(selectedCustomer);
+                    break;
+                case 'edit-customer':
+                    setupAndOpenUpdateCustomerModal(selectedCustomer);
+                    break;
                 case 'delete-customer':
                     if (confirm(`Yakin ingin menghapus ${button.dataset.customerName}? Semua riwayat servis juga akan terhapus.`)) {
                         handleApiCall(window.electronAPI.deleteCustomer, button.dataset.customerId, 'Pelanggan berhasil dihapus!', 'Gagal menghapus pelanggan');
@@ -536,48 +617,111 @@ document.addEventListener('DOMContentLoaded', () => {
         document.querySelector('#detail-modal-history').addEventListener('click', (e) => {
             const button = e.target.closest('button[data-action="edit-note"]');
             if (button) {
-                closeModal(customerDetailModal);
                 setupAndOpenHistoryNoteModal(button.dataset);
             }
         });
 
-        // =================================================================
-        // PERUBAHAN 1: LOGIKA PENUTUPAN MODAL & TOMBOL BATAL (MENYELURUH)
-        // =================================================================
         modals.forEach(modal => {
             modal.addEventListener('click', (e) => {
                 if (e.target.closest('[data-action="close"]')) {
                     closeModal(modal);
-
-                    // Daftar modal yang jika ditutup akan kembali ke detail pelanggan
-                    const subModals = ['update-customer-modal', 'update-contact-modal', 'update-service-modal', 'update-history-note-modal'];
-                    if (subModals.includes(modal.id) && selectedCustomer) {
-                        showCustomerDetails(selectedCustomer);
-                    }
                 }
             });
             modal.addEventListener('input', () => validateForm(modal));
-
             const form = modal.querySelector('form');
             if (form) {
                 form.addEventListener('submit', e => e.preventDefault());
             }
         });
 
-        // =================================================================
-        // PERUBAHAN 2: LOGIKA PENYIMPANAN DATA (MENYELURUH)
-        // =================================================================
-        async function saveDataAndReturnToDetails(modalToClose, apiFunction, data, successMessage, errorMessagePrefix, customerId) {
+        // --- Event Listener Baru untuk Modal Catatan ---
+        document.getElementById('edit-notes-btn').addEventListener('click', () => {
+            setNotesModalMode('edit');
+            const notesEditor = document.getElementById('notes-editor-textarea');
+            // Format catatan yang ada menjadi daftar bullet untuk diedit
+            const currentNotes = (selectedCustomer.customerNotes || '').split('\n')
+                .filter(line => line.trim() !== '')
+                .map(line => line.trim().startsWith('•') ? line.trim() : `• ${line.trim()}`)
+                .join('\n');
+            notesEditor.value = currentNotes;
+            notesEditor.focus();
+        });
+
+        document.getElementById('cancel-edit-notes-btn').addEventListener('click', () => {
+            setNotesModalMode('view');
+        });
+
+        document.getElementById('notes-editor-textarea').addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                const textarea = e.target;
+                const { selectionStart, selectionEnd, value } = textarea;
+                const newValue = `${value.substring(0, selectionStart)}\n• ${value.substring(selectionEnd)}`;
+                textarea.value = newValue;
+                // Pindahkan kursor ke setelah bullet point yang baru
+                textarea.selectionStart = textarea.selectionEnd = selectionStart + 3;
+            }
+        });
+
+        document.getElementById('save-notes-btn').addEventListener('click', async () => {
             showLoading();
-            closeModal(modalToClose);
+
+            const newNotes = document.getElementById('notes-editor-textarea').value
+                .split('\n')
+                .map(line => line.trim().replace(/^•\s*/, ''))
+                .filter(line => line)
+                .join('\n');
+
+            const customerId = selectedCustomer.customerID;
+
+            const updatedData = {
+                customerNotes: newNotes
+            };
+
+            try {
+                const result = await window.electronAPI.updateCustomer(activeSheetId, { customerID: customerId, updatedData });
+                if (!result.success) {
+                    throw new Error(result.error);
+                }
+
+                const refreshResult = await window.electronAPI.refreshData(activeSheetId);
+                if (refreshResult.success) {
+                    customers = refreshResult.data || [];
+                    renderCustomers();
+
+                    const updatedCustomer = customers.find(c => c.customerID === customerId);
+                    if (updatedCustomer) {
+                        showCustomerNotes(updatedCustomer);
+                        setNotesModalMode('view');
+                    } else {
+                        closeModal(customerNotesModal);
+                    }
+                } else {
+                    throw new Error(refreshResult.error || 'Gagal menyegarkan data setelah menyimpan.');
+                }
+            } catch (err) {
+                alert(`Gagal menyimpan catatan: ${err.message}`);
+                showCustomerNotes(selectedCustomer);
+            } finally {
+                hideLoading();
+            }
+        });
+
+
+        async function saveDataAndRefreshDetails(modalToClose, apiFunction, data, successMessage, errorMessagePrefix, customerId) {
+            showLoading();
             try {
                 const result = await apiFunction(activeSheetId, data);
                 if (result.success) {
                     alert(successMessage);
-                    await initializeApp({ keepFilters: true });
-                    const updatedCustomer = customers.find(c => c.customerID === customerId);
-                    if (updatedCustomer) {
-                        showCustomerDetails(updatedCustomer);
+                    const refreshResult = await window.electronAPI.refreshData(activeSheetId);
+                    if (refreshResult.success) {
+                        customers = refreshResult.data || [];
+                        renderCustomers();
+                        const updatedCustomer = customers.find(c => c.customerID === customerId);
+                        if (updatedCustomer) {
+                            showCustomerDetails(updatedCustomer);
+                        }
                     }
                 } else {
                     throw new Error(result.error);
@@ -585,83 +729,75 @@ document.addEventListener('DOMContentLoaded', () => {
             } catch (err) {
                 console.error('API Call Error:', err);
                 alert(`${errorMessagePrefix}: ${err.message}`);
-                // Jika gagal, coba kembali ke detail dengan data lama
-                const originalCustomer = customers.find(c => c.customerID === customerId);
-                if (originalCustomer) showCustomerDetails(originalCustomer);
             } finally {
                 hideLoading();
             }
         }
 
-        document.getElementById('contact-modal-save').addEventListener('click', async () => {
+        document.getElementById('contact-modal-save').addEventListener('click', () => {
             const customerToUpdateId = selectedCustomer.customerID;
             const statusMap = { 'not_contacted': 'UPCOMING', 'contacted': 'CONTACTED', 'overdue': 'OVERDUE', 'postponed': 'POSTPONED', 'refused': 'REFUSED' };
-            const selectedStatus = contactModalStatus.value;
             const data = {
                 serviceID: selectedCustomer.serviceID,
-                newStatus: statusMap[selectedStatus],
+                newStatus: statusMap[contactModalStatus.value],
                 notes: document.getElementById('contact-modal-notes').value,
                 postponeDuration: document.getElementById('contact-modal-postpone-duration').value,
                 refusalFollowUp: document.getElementById('contact-modal-refusal-follow-up').value
             };
-            saveDataAndReturnToDetails(updateContactModal, window.electronAPI.updateContactStatus, data, 'Status kontak berhasil diupdate!', 'Gagal mengupdate status', customerToUpdateId);
+            saveDataAndRefreshDetails(updateContactModal, window.electronAPI.updateContactStatus, data, 'Status kontak berhasil diupdate!', 'Gagal mengupdate status', customerToUpdateId);
         });
 
-        document.getElementById('service-modal-save').addEventListener('click', async () => {
+        document.getElementById('service-modal-save').addEventListener('click', () => {
             const customerToUpdateId = selectedCustomer.customerID;
             const data = {
                 serviceID: selectedCustomer.serviceID,
                 newDate: document.getElementById('service-modal-date').value,
                 newHandler: document.getElementById('service-modal-handler').value
             };
-            saveDataAndReturnToDetails(updateServiceModal, window.electronAPI.updateService, data, 'Layanan berhasil diperbarui!', 'Gagal memperbarui layanan', customerToUpdateId);
+            saveDataAndRefreshDetails(updateServiceModal, window.electronAPI.updateService, data, 'Layanan berhasil diperbarui!', 'Gagal memperbarui layanan', customerToUpdateId);
         });
 
-        document.getElementById('history-note-modal-save').addEventListener('click', async () => {
+        document.getElementById('history-note-modal-save').addEventListener('click', () => {
             const customerToUpdateId = selectedCustomer.customerID;
             const data = {
                 serviceID: selectedServiceForNoteEdit.serviceId,
                 newNotes: document.getElementById('history-note-modal-notes').value,
                 newHandler: document.getElementById('history-note-modal-handler').value
             };
-            saveDataAndReturnToDetails(updateHistoryNoteModal, window.electronAPI.updateHistoryNote, data, 'Catatan riwayat berhasil diperbarui!', 'Gagal memperbarui catatan', customerToUpdateId);
+            saveDataAndRefreshDetails(updateHistoryNoteModal, window.electronAPI.updateHistoryNote, data, 'Catatan riwayat berhasil diperbarui!', 'Gagal memperbarui catatan', customerToUpdateId);
         });
 
-        document.getElementById('update-modal-save').addEventListener('click', async () => {
+        document.getElementById('update-modal-save').addEventListener('click', () => {
             const customerToUpdateId = selectedCustomer.customerID;
             const updatedData = {
                 name: document.getElementById('update-modal-name').value,
                 phone: document.getElementById('update-modal-phone').value,
                 address: document.getElementById('update-modal-address').value,
                 kota: document.getElementById('update-modal-kota').value,
-                customerNotes: document.getElementById('update-modal-customer-notes').value
             };
             const data = { customerID: customerToUpdateId, updatedData };
-            saveDataAndReturnToDetails(updateCustomerModal, window.electronAPI.updateCustomer, data, 'Data pelanggan berhasil diupdate!', 'Gagal mengupdate data pelanggan', customerToUpdateId);
+            saveDataAndRefreshDetails(updateCustomerModal, window.electronAPI.updateCustomer, data, 'Data pelanggan berhasil diupdate!', 'Gagal mengupdate data pelanggan', customerToUpdateId);
         });
 
-        // Logika untuk tombol simpan yang tidak perlu kembali ke detail (contoh: tambah pelanggan)
         document.getElementById('add-modal-save').addEventListener('click', () => {
             const customerData = { name: document.getElementById('add-modal-name').value, phone: document.getElementById('add-modal-phone').value, address: document.getElementById('add-modal-address').value, kota: document.getElementById('add-modal-kota').value, customerNotes: document.getElementById('add-modal-customer-notes').value, nextService: document.getElementById('add-modal-nextService').value, handler: document.getElementById('add-modal-handler').value };
             handleApiCall(window.electronAPI.addCustomer, customerData, 'Pelanggan baru berhasil ditambahkan!', 'Gagal menambah pelanggan');
         });
 
-        // =================================================================
-        // PERUBAHAN 3: LOGIKA TOMBOL ESCAPE (MENYELURUH)
-        // =================================================================
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape') {
                 const visibleModals = Array.from(modals).filter(m => !m.classList.contains('hidden'));
                 if (visibleModals.length === 0) return;
 
-                // Ambil modal yang paling atas
-                const topModal = visibleModals[visibleModals.length - 1];
-
-                // Cari tombol tutup di modal tersebut dan simulasikan klik
-                const closeButton = topModal.querySelector('[data-action="close"]');
-                if (closeButton) {
-                    closeButton.click();
+                let topModal = visibleModals[0];
+                if (visibleModals.length > 1) {
+                    topModal = visibleModals.reduce((prev, current) => {
+                        const prevZ = parseInt(window.getComputedStyle(prev).zIndex, 10) || 0;
+                        const currentZ = parseInt(window.getComputedStyle(current).zIndex, 10) || 0;
+                        return prevZ > currentZ ? prev : current;
+                    });
                 }
+                closeModal(topModal);
             }
         });
     }
@@ -669,9 +805,6 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- App Initialization ---
     async function initializeApp(options = {}) {
         const { keepFilters = false } = options;
-
-        currentView = localStorage.getItem('customerView') || 'bubble';
-        updateViewButtons();
 
         showLoading();
         errorIndicator.classList.add('hidden');
@@ -700,7 +833,6 @@ document.addEventListener('DOMContentLoaded', () => {
             errorIndicator.classList.remove('hidden');
         } finally {
             hideLoading();
-            lucide.createIcons();
         }
     }
 
