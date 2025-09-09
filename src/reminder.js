@@ -26,6 +26,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const updateCustomerModal = document.getElementById('update-customer-modal');
     const updateHistoryNoteModal = document.getElementById('update-history-note-modal');
     const customerDetailModal = document.getElementById('customer-detail-modal');
+    const customerNotesModal = document.getElementById('customer-notes-modal'); // BARU
     const contactModalStatus = document.getElementById('contact-modal-status');
     const postponeDurationContainer = document.getElementById('postpone-duration-container');
     const refusalFollowUpContainer = document.getElementById('refusal-follow-up-container');
@@ -180,12 +181,38 @@ document.addEventListener('DOMContentLoaded', () => {
         cityFilterSelect.value = selectedValue;
     }
 
+    // Fungsi untuk menampilkan catatan pelanggan (BARU)
+    function showCustomerNotes(customer) {
+        const modalName = document.getElementById('notes-modal-customer-name');
+        const modalContent = document.getElementById('notes-modal-content');
+
+        modalName.textContent = customer.name;
+
+        const notes = customer.customerNotes || '';
+
+        if (notes.trim()) {
+            // Ubah catatan menjadi poin-poin jika ada baris baru
+            const notesArray = notes.split('\n').filter(line => line.trim() !== '');
+            modalContent.innerHTML = `
+                <ul class="list-disc pl-5 space-y-2">
+                    ${notesArray.map(note => `<li>${note.trim()}</li>`).join('')}
+                </ul>
+            `;
+        } else {
+            modalContent.innerHTML = `<p class="text-gray-500">Tidak ada catatan untuk pelanggan ini.</p>`;
+        }
+
+        openModal(customerNotesModal);
+    }
+
+
     function showCustomerDetails(customer) {
         selectedCustomer = customer;
         const priority = calculatePriority(customer);
         const contactStatusDisplay = getContactStatusDisplay(customer);
         const serviceDays = getDaysUntilService(customer);
         const mostRecentServiceDate = getMostRecentService(customer.services);
+
         const allServicesSorted = customer.services
             ? [...customer.services]
                 .filter(s => s.status !== 'UPCOMING')
@@ -306,28 +333,38 @@ document.addEventListener('DOMContentLoaded', () => {
             const priority = calculatePriority(customer);
             const card = document.createElement('div');
             card.dataset.customerId = customer.customerID;
-            card.className = `bg-white rounded-lg shadow-sm border border-gray-200 hover:shadow-md transition-shadow cursor-pointer ${currentView === 'bubble' ? 'p-4' : 'flex items-center justify-between p-4'}`;
+            // DIUBAH: Klik kartu tidak lagi membuka detail, hanya area spesifik
+            card.className = `bg-white rounded-lg shadow-sm border border-gray-200 hover:shadow-md transition-shadow ${currentView === 'bubble' ? 'p-4' : 'flex items-center justify-between p-4'}`;
 
             if (currentView === 'bubble') {
+                // DIUBAH: Menambahkan tombol catatan
                 card.innerHTML = `
-                    <div class="flex items-center justify-between mb-2">
-                        <h3 class="text-lg font-bold text-gray-900 truncate">${customer.name}</h3>
-                        <span class="px-2 py-0.5 rounded-full text-xs font-medium ${getPriorityColor(priority)}">${priority}</span>
+                    <div data-action="open-details" class="cursor-pointer">
+                        <div class="flex items-center justify-between mb-2">
+                            <h3 class="text-lg font-bold text-gray-900 truncate">${customer.name}</h3>
+                            <span class="px-2 py-0.5 rounded-full text-xs font-medium ${getPriorityColor(priority)}">${priority}</span>
+                        </div>
+                        <div class="space-y-1">
+                            <div class="flex items-center gap-2 text-sm text-gray-600">
+                                <i data-lucide="map-pin" class="w-4 h-4"></i>
+                                <span class="truncate">${customer.kota || 'N/A'}</span>
+                            </div>
+                            <div class="flex items-center gap-2 text-sm text-gray-600">
+                                <i data-lucide="calendar" class="w-4 h-4"></i>
+                                <span>${formatDate(customer.nextService)}</span>
+                            </div>
+                        </div>
                     </div>
-                    <div class="space-y-1">
-                        <div class="flex items-center gap-2 text-sm text-gray-600">
-                            <i data-lucide="map-pin" class="w-4 h-4"></i>
-                            <span class="truncate">${customer.kota || 'N/A'}</span>
-                        </div>
-                        <div class="flex items-center gap-2 text-sm text-gray-600">
-                            <i data-lucide="calendar" class="w-4 h-4"></i>
-                            <span>${formatDate(customer.nextService)}</span>
-                        </div>
+                    <div class="border-t mt-3 pt-2 flex justify-end">
+                        <button data-action="view-notes" title="Lihat Catatan Pelanggan" class="text-gray-500 hover:text-blue-600 p-1 rounded-full transition-colors">
+                            <i data-lucide="notebook-text" class="w-5 h-5 pointer-events-none"></i>
+                        </button>
                     </div>
                 `;
             } else { // List view
+                // DIUBAH: Menambahkan tombol catatan
                 card.innerHTML = `
-                    <div class="flex items-center gap-4 flex-grow min-w-0">
+                    <div data-action="open-details" class="flex items-center gap-4 flex-grow min-w-0 cursor-pointer">
                         <h3 class="text-lg font-bold text-gray-900 truncate">${customer.name}</h3>
                         <div class="relative pl-4 data-separator hidden md:block">
                             <span class="text-sm font-medium text-gray-600">${customer.kota || 'N/A'}</span>
@@ -336,8 +373,11 @@ document.addEventListener('DOMContentLoaded', () => {
                             <span class="text-sm font-medium text-gray-600 truncate">Servis Berikutnya: <span class="font-bold">${formatDate(customer.nextService)}</span></span>
                         </div>
                     </div>
-                    <div class="flex-shrink-0">
+                    <div class="flex-shrink-0 flex items-center gap-3 pl-4">
                         <span class="px-2 py-0.5 rounded-full text-xs font-medium ${getPriorityColor(priority)}">${priority}</span>
+                        <button data-action="view-notes" title="Lihat Catatan Pelanggan" class="text-gray-500 hover:text-blue-600 p-1 rounded-full transition-colors">
+                             <i data-lucide="notebook-text" class="w-5 h-5 pointer-events-none"></i>
+                        </button>
                     </div>
                 `;
             }
@@ -456,14 +496,27 @@ document.addEventListener('DOMContentLoaded', () => {
             refusalFollowUpContainer.classList.toggle('hidden', selectedValue !== 'refused');
         });
 
+        // DIUBAH: Event listener untuk menangani klik pada kartu dan tombol di dalamnya
         customerListContainer.addEventListener('click', (e) => {
             const card = e.target.closest('div[data-customer-id]');
-            if (card) {
-                const customerId = card.dataset.customerId;
-                const customer = customers.find(c => c.customerID === customerId);
-                if (customer) showCustomerDetails(customer);
+            if (!card) return;
+
+            const customerId = card.dataset.customerId;
+            const customer = customers.find(c => c.customerID === customerId);
+            if (!customer) return;
+
+            const actionTarget = e.target.closest('[data-action]');
+
+            if (actionTarget) {
+                const action = actionTarget.getAttribute('data-action');
+                if (action === 'view-notes') {
+                    showCustomerNotes(customer);
+                } else if (action === 'open-details') {
+                    showCustomerDetails(customer);
+                }
             }
         });
+
 
         customerDetailModal.addEventListener('click', (e) => {
             const button = e.target.closest('button[data-action]');
