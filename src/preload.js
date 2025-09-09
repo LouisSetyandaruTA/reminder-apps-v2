@@ -7,6 +7,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     addDatabase: (data) => ipcRenderer.invoke('add-database', data),
     deleteDatabase: (id) => ipcRenderer.invoke('delete-database', id),
     openReminderForSheet: (data) => ipcRenderer.send('open-reminder-for-sheet', data),
+    getClientEmail: () => ipcRenderer.invoke('get-client-email'),
 
     // --- Fungsi untuk Jendela Reminder ---
     refreshData: (spreadsheetId) => ipcRenderer.invoke('refresh-data', spreadsheetId),

@@ -7,6 +7,22 @@ document.addEventListener('DOMContentLoaded', () => {
     const dbNameInput = document.getElementById('db-name');
     const dbIdInput = document.getElementById('db-id');
 
+    const shareEmailInstruction = document.getElementById('share-email-instruction');
+
+    async function loadClientEmail() {
+        try {
+            const email = await window.electronAPI.getClientEmail();
+            if (email && shareEmailInstruction) {
+                shareEmailInstruction.innerHTML = `Bagikan Google Sheet Anda ke alamat email berikut dengan akses <strong>Editor</strong>: <br><strong class="text-blue-600 break-all">${email}</strong>`;
+            }
+        } catch (error) {
+            console.error('Gagal memuat client email:', error);
+            if (shareEmailInstruction) {
+                shareEmailInstruction.textContent = 'Gagal memuat email. Pastikan file credentials.json sudah benar.';
+            }
+        }
+    }
+
     const openModal = () => addDbModal.classList.remove('hidden');
     const closeModal = () => addDbModal.classList.add('hidden');
 
@@ -77,5 +93,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
+    loadClientEmail();
     loadDatabases();
 });

@@ -352,6 +352,10 @@ app.on('window-all-closed', () => {
 // --- IPC Handlers ---
 ipcMain.handle('get-databases', () => readDatabases());
 
+ipcMain.handle('get-client-email', () => {
+  return creds.client_email;
+});
+
 ipcMain.handle('add-database', (event, { name, id }) => {
   const dbs = readDatabases();
   dbs.push({ name, id });
@@ -707,7 +711,6 @@ ipcMain.handle('import-data', async (event, spreadsheetId) => {
   const servicesPath = path.join(tempDir, 'services_to_import.csv');
 
   try {
-    // 1. Jalankan skrip Python untuk memproses file input
     const isPackaged = app.isPackaged;
     const scriptPath = isPackaged ? path.join(process.resourcesPath, 'scripts') : 'scripts';
     const pythonExecutable = isPackaged ? null : (process.platform === 'win32' ? 'venv\\Scripts\\python.exe' : 'venv/bin/python');
@@ -722,14 +725,11 @@ ipcMain.handle('import-data', async (event, spreadsheetId) => {
 
     await PythonShell.run(scriptFile, options);
 
-    // 2. Baca hasil CSV dari skrip Python
     const customersToImport = [];
     const servicesToImport = [];
     await new Promise((resolve, reject) => fs.createReadStream(customersPath).pipe(csv()).on('data', (row) => customersToImport.push(row)).on('end', resolve).on('error', reject));
     await new Promise((resolve, reject) => fs.createReadStream(servicesPath).pipe(csv()).on('data', (row) => servicesToImport.push(row)).on('end', resolve).on('error', reject));
 
-    // 3. Dapatkan data yang ada dari Google Sheet untuk menghindari duplikasi ID
-    // PERBAIKAN KRUSIAL: Menggunakan spreadsheetId yang aktif
     const { customerSheet, serviceSheet } = await getSheets(spreadsheetId);
     const existingCustRows = await customerSheet.getRows();
     const existingServRows = await serviceSheet.getRows();
@@ -756,9 +756,8 @@ ipcMain.handle('import-data', async (event, spreadsheetId) => {
       }
     });
 
-    // 4. Proses dan tambahkan data baru
     const newCustomerRows = [];
-    const customerMap = new Map(); // map nama pelanggan ke ID baru
+    const customerMap = new Map();
     customersToImport.forEach(c => {
       lastCustSeq++;
       const purchaseDate = new Date(c.purchaseDate);
@@ -787,7 +786,6 @@ ipcMain.handle('import-data', async (event, spreadsheetId) => {
       });
     });
 
-    // Buat jadwal reminder berikutnya untuk setiap pelanggan yang diimpor
     const latestServiceMap = new Map();
     servicesToImport.forEach(s => {
       const currentLatest = latestServiceMap.get(s.name) || new Date(0);
@@ -812,7 +810,6 @@ ipcMain.handle('import-data', async (event, spreadsheetId) => {
       });
     });
 
-    // 5. Kirim data baru ke Google Sheets
     if (newCustomerRows.length > 0) await customerSheet.addRows(newCustomerRows);
     if (allNewServiceRows.length > 0) await serviceSheet.addRows(allNewServiceRows);
 
