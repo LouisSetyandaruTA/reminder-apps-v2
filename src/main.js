@@ -36,6 +36,19 @@ function writeDatabases(databases) {
 }
 
 // --- Helper Functions ---
+/**
+ * Memformat nama kota: huruf pertama kapital, sisanya kecil, dan hapus spasi ekstra.
+ * @param {string} city Nama kota yang akan diformat.
+ * @returns {string} Nama kota yang sudah diformat.
+ */
+function formatCityName(city) {
+  if (!city || typeof city !== 'string') return '';
+  const trimmedCity = city.trim();
+  if (!trimmedCity) return '';
+  return trimmedCity.charAt(0).toUpperCase() + trimmedCity.slice(1).toLowerCase();
+}
+
+
 function formatDateToYYYYMMDD(date) {
   const d = new Date(date);
   const year = d.getFullYear();
@@ -128,7 +141,7 @@ async function getDataFromSheets(spreadsheetId) {
       name: row.get('Nama'),
       address: row.get('Alamat'),
       phone: row.get('No Telp'),
-      kota: row.get('Kota'),
+      kota: formatCityName(row.get('Kota')), // PERBAIKAN DI SINI
       pemasangan: row.get('Pemasangan'),
       customerNotes: row.get('Notes Pelanggan'),
     });
@@ -193,7 +206,7 @@ async function getFlatDataForExport(spreadsheetId) {
       name: row.get('Nama') || '',
       address: row.get('Alamat') || '',
       phone: row.get('No Telp') || '',
-      kota: row.get('Kota') || '',
+      kota: formatCityName(row.get('Kota') || ''), // PERBAIKAN DI SINI
       Pemasangan: row.get('Pemasangan') || '',
       customerNotes: row.get('Notes Pelanggan') || '',
     });
@@ -267,18 +280,18 @@ async function checkUpcomingServices() {
   // Kelompokkan notifikasi agar tidak spam
   const upcomingGroups = {};
   allUpcomingServices.forEach(s => {
-      if (!upcomingGroups[s.days]) upcomingGroups[s.days] = [];
-      upcomingGroups[s.days].push(s.name);
+    if (!upcomingGroups[s.days]) upcomingGroups[s.days] = [];
+    upcomingGroups[s.days].push(s.name);
   });
 
   for (const days in upcomingGroups) {
-      const customerCount = upcomingGroups[days].length;
-      if (customerCount === 0) continue;
-      
-      let timeText = (days === '0') ? 'HARI INI' : (days === '1' ? 'BESOK' : `dalam ${days} hari`);
-      const bodyMessage = `Ada ${customerCount} pelanggan dengan jadwal servis ${timeText}.`;
-      
-      new Notification({ title: 'Pengingat Jadwal Servis', body: bodyMessage }).show();
+    const customerCount = upcomingGroups[days].length;
+    if (customerCount === 0) continue;
+
+    let timeText = (days === '0') ? 'HARI INI' : (days === '1' ? 'BESOK' : `dalam ${days} hari`);
+    const bodyMessage = `Ada ${customerCount} pelanggan dengan jadwal servis ${timeText}.`;
+
+    new Notification({ title: 'Pengingat Jadwal Servis', body: bodyMessage }).show();
   }
 
   if (allOverdueServices.length > 0) {
@@ -323,7 +336,7 @@ const createReminderWindow = (sheetId, sheetName) => {
 
 app.whenReady().then(() => {
   createWindow();
-  
+
   checkUpcomingServices();
   setInterval(checkUpcomingServices, 3600 * 1000);
 
@@ -385,7 +398,7 @@ ipcMain.handle('add-customer', async (event, { spreadsheetId, customerData }) =>
       Nama: customerData.name,
       Alamat: customerData.address,
       'No Telp': customerData.phone,
-      Kota: customerData.kota,
+      Kota: formatCityName(customerData.kota), // PERBAIKAN DI SINI
       'Pemasangan': installationDateString,
       'Notes Pelanggan': customerData.customerNotes || '',
     });
@@ -552,7 +565,7 @@ ipcMain.handle('update-customer', async (event, { spreadsheetId, customerID, upd
     rowToUpdate.set('Nama', updatedData.name);
     rowToUpdate.set('Alamat', updatedData.address);
     rowToUpdate.set('No Telp', updatedData.phone);
-    rowToUpdate.set('Kota', updatedData.kota);
+    rowToUpdate.set('Kota', formatCityName(updatedData.kota)); // PERBAIKAN DI SINI
     rowToUpdate.set('Notes Pelanggan', updatedData.customerNotes || '');
 
     await rowToUpdate.save();
@@ -636,7 +649,7 @@ ipcMain.handle('export-data', async (event, spreadsheetId) => {
 
     const pythonExecutable = isPackaged ? null : (process.platform === 'win32' ? 'venv\\Scripts\\python.exe' : 'venv/bin/python');
     const scriptFile = 'export_data.py';
-    
+
     console.log(`Running export script. Packaged: ${isPackaged}`);
     console.log(`Script path: ${path.join(scriptPath, scriptFile)}`);
     console.log(`Python path: ${pythonExecutable}`);
@@ -803,4 +816,3 @@ ipcMain.handle('import-data', async (event, spreadsheetId) => {
     if (fs.existsSync(servicesPath)) fs.unlinkSync(servicesPath);
   }
 });
-

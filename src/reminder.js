@@ -186,7 +186,11 @@ document.addEventListener('DOMContentLoaded', () => {
         const contactStatusDisplay = getContactStatusDisplay(customer);
         const serviceDays = getDaysUntilService(customer);
         const mostRecentServiceDate = getMostRecentService(customer.services);
-        const allServicesSorted = customer.services ? [...customer.services].sort((a, b) => new Date(b.date) - new Date(a.date)) : [];
+        const allServicesSorted = customer.services
+            ? [...customer.services]
+                .filter(s => s.status !== 'UPCOMING')
+                .sort((a, b) => new Date(b.date) - new Date(a.date))
+            : [];
 
         document.getElementById('detail-modal-name').textContent = customer.name;
         document.getElementById('detail-modal-priority').textContent = priority;
