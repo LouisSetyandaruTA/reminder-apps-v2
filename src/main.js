@@ -314,7 +314,14 @@ const createWindow = () => {
       preload: path.join(__dirname, 'preload.js'),
     },
   });
-  mainWindow.loadFile('index.html');
+
+  if (MAIN_WINDOW_VITE_DEV_SERVER_URL) {
+    mainWindow.loadURL(MAIN_WINDOW_VITE_DEV_SERVER_URL);
+  } else {
+    mainWindow.loadFile(path.join(__dirname, `../renderer/${MAIN_WINDOW_VITE_NAME}/index.html`));
+  }
+
+  mainWindow.webContents.openDevTools();
 };
 
 const createReminderWindow = (sheetId, sheetName) => {
@@ -327,7 +334,11 @@ const createReminderWindow = (sheetId, sheetName) => {
     title: `Reminder - ${sheetName}`
   });
 
-  reminderWindow.loadFile('reminder.html');
+  if (REMINDER_WINDOW_VITE_DEV_SERVER_URL) {
+    reminderWindow.loadURL(REMINDER_WINDOW_VITE_DEV_SERVER_URL);
+  } else {
+    reminderWindow.loadFile(path.join(__dirname, `../renderer/${REMINDER_WINDOW_VITE_NAME}/reminder.html`));
+  }
 
   reminderWindow.webContents.once('did-finish-load', () => {
     reminderWindow.webContents.send('load-sheet', { id: sheetId, name: sheetName });

@@ -1,11 +1,11 @@
 const { FusesPlugin } = require('@electron-forge/plugin-fuses');
 const { FuseV1Options, FuseVersion } = require('@electron/fuses');
+const { VitePlugin } = require('@electron-forge/plugin-vite'); // Import the VitePlugin class
 
 module.exports = {
   packagerConfig: {
     asar: true,
-    // Gunakan path tanpa ekstensi, Electron Forge akan menemukan yang benar secara otomatis
-    icon: 'assets/Logo_Solahart' 
+    icon: 'assets/Logo_Solahart' // Path without extension is fine
   },
   rebuildConfig: {},
   makers: [
@@ -19,49 +19,49 @@ module.exports = {
       name: '@electron-forge/maker-zip',
       platforms: ['darwin'],
       config: {
-        // Gunakan path ke file ikon .icns untuk macOS
         icon: 'assets/Logo_Solahart.icns'
       }
     },
     {
       name: '@electron-forge/maker-deb',
       config: {
-        // Gunakan path ke file ikon .png untuk Linux
         icon: 'assets/Logo_Solahart.png'
       },
     },
     {
       name: '@electron-forge/maker-rpm',
       config: {
-        // Gunakan path ke file ikon .png untuk Linux
         icon: 'assets/Logo_Solahart.png'
       },
     },
   ],
   plugins: [
-    {
-      name: '@electron-forge/plugin-vite',
-      config: {
-        build: [
-          {
-            entry: 'src/main.js',
-            config: 'vite.main.config.mjs',
-            target: 'main',
-          },
-          {
-            entry: 'src/preload.js',
-            config: 'vite.preload.config.mjs',
-            target: 'preload',
-          },
-        ],
-        renderer: [
-          {
-            name: 'main_window',
-            config: 'vite.renderer.config.mjs',
-          },
-        ],
-      },
-    },
+    // Use the VitePlugin constructor for proper initialization
+    new VitePlugin({
+      build: [
+        {
+          // The 'main' process entry file
+          entry: 'src/main.js',
+          config: 'vite.main.config.mjs',
+        },
+        {
+          // The 'preload' script entry file
+          entry: 'src/preload.js',
+          config: 'vite.preload.config.mjs',
+        },
+      ],
+      renderer: [
+        {
+          name: 'main_window',
+          config: 'vite.renderer.config.mjs',
+        },
+        {
+          name: 'reminder_window',
+          config: 'vite.renderer.config.mjs',
+        },
+      ],
+    }),
+
     new FusesPlugin({
       version: FuseVersion.V1,
       [FuseV1Options.RunAsNode]: false,
