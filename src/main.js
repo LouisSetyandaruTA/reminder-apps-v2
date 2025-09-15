@@ -250,10 +250,12 @@ async function checkUpcomingServices() {
   let allContactOverdue = [];
 
   for (const db of databases) {
+    console.log(`Mengecek database: ${db.name}...`); // Log tambahan untuk debugging
     try {
       const data = await getDataFromSheets(db.id);
 
       data.forEach(customer => {
+        // Logika untuk jadwal servis yang akan datang atau sudah terlewat
         if (customer.nextService && customer.status === 'UPCOMING') {
           const nextServiceDate = new Date(customer.nextService);
           nextServiceDate.setHours(0, 0, 0, 0);
@@ -268,16 +270,22 @@ async function checkUpcomingServices() {
             allOverdueServices.push({ name: customer.name });
           }
         }
+        // Logika untuk kontak yang perlu di-follow up
         if (customer.status === 'OVERDUE') {
           allContactOverdue.push({ name: customer.name });
         }
       });
     } catch (error) {
       console.error(`Gagal memeriksa notifikasi untuk database '${db.name}':`, error.message);
+      // --- PERBAIKAN UTAMA: Tampilkan notifikasi jika terjadi error ---
+      new Notification({
+        title: 'Gagal Memeriksa Jadwal',
+        body: `Tidak bisa mengambil data dari '${db.name}'. Periksa koneksi atau setelan Google Sheet.`
+      }).show();
     }
   }
 
-  // Kelompokkan notifikasi agar tidak spam
+  // Bagian ini tetap sama, untuk mengelompokkan dan menampilkan notifikasi
   const upcomingGroups = {};
   allUpcomingServices.forEach(s => {
     if (!upcomingGroups[s.days]) upcomingGroups[s.days] = [];
