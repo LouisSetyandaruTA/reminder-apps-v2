@@ -245,17 +245,20 @@ async function checkUpcomingServices() {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
-  let allUpcomingServices = [];
-  let allOverdueServices = [];
-  let allContactOverdue = [];
-
+  // Lakukan perulangan untuk setiap database secara terpisah
   for (const db of databases) {
-    console.log(`Mengecek database: ${db.name}...`); // Log tambahan untuk debugging
+    console.log(`Mengecek database: ${db.name}...`);
+
+    // Pindahkan deklarasi ke dalam loop agar di-reset untuk setiap database
+    let allUpcomingServices = [];
+    let allOverdueServices = [];
+    let allContactOverdue = [];
+
     try {
       const data = await getDataFromSheets(db.id);
 
       data.forEach(customer => {
-        // Logika untuk jadwal servis yang akan datang atau sudah terlewat
+        // Logika untuk jadwal servis (tidak berubah)
         if (customer.nextService && customer.status === 'UPCOMING') {
           const nextServiceDate = new Date(customer.nextService);
           nextServiceDate.setHours(0, 0, 0, 0);
@@ -264,53 +267,66 @@ async function checkUpcomingServices() {
           const timeDiff = nextServiceDate.getTime() - today.getTime();
           const daysDiff = Math.ceil(timeDiff / (1000 * 3600 * 24));
 
-          if (daysDiff >= 0 && daysDiff <= 7) { // Reminder untuk 7 hari ke depan
+          if (daysDiff >= 0 && daysDiff <= 7) {
             allUpcomingServices.push({ name: customer.name, days: daysDiff });
           } else if (daysDiff < 0) {
             allOverdueServices.push({ name: customer.name });
           }
         }
-        // Logika untuk kontak yang perlu di-follow up
+        // Logika untuk kontak (tidak berubah)
         if (customer.status === 'OVERDUE') {
           allContactOverdue.push({ name: customer.name });
         }
       });
+
+      // --- PEMBUATAN NOTIFIKASI (SEKARANG PER DATABASE) ---
+
+      // 1. Notifikasi untuk jadwal yang akan datang
+      const upcomingGroups = {};
+      allUpcomingServices.forEach(s => {
+        if (!upcomingGroups[s.days]) upcomingGroups[s.days] = [];
+        upcomingGroups[s.days].push(s.name);
+      });
+
+      for (const days in upcomingGroups) {
+        const customerCount = upcomingGroups[days].length;
+        if (customerCount === 0) continue;
+
+        let timeText = (days === '0') ? 'HARI INI' : (days === '1' ? 'BESOK' : `dalam ${days} hari`);
+        const bodyMessage = `Ada ${customerCount} pelanggan dengan jadwal servis ${timeText}.`;
+
+        new Notification({
+          title: `[${db.name}] Pengingat Jadwal Servis`, // Judul diubah
+          body: bodyMessage
+        }).show();
+      }
+
+      // 2. Notifikasi untuk jadwal yang sudah terlewat
+      if (allOverdueServices.length > 0) {
+        const bodyMessage = `Perhatian, ada ${allOverdueServices.length} pelanggan yang jadwal servisnya terlewat.`;
+        new Notification({
+          title: `[${db.name}] Jadwal Servis Terlewat!`, // Judul diubah
+          body: bodyMessage
+        }).show();
+      }
+
+      // 3. Notifikasi untuk kontak yang perlu di-follow up
+      if (allContactOverdue.length > 0) {
+        const bodyMessage = `Ada ${allContactOverdue.length} pelanggan berstatus "tidak bisa dihubungi".`;
+        new Notification({
+          title: `[${db.name}] Kontak Perlu Follow Up`, // Judul diubah
+          body: bodyMessage
+        }).show();
+      }
+
     } catch (error) {
       console.error(`Gagal memeriksa notifikasi untuk database '${db.name}':`, error.message);
-      // --- PERBAIKAN UTAMA: Tampilkan notifikasi jika terjadi error ---
       new Notification({
-        title: 'Gagal Memeriksa Jadwal',
-        body: `Tidak bisa mengambil data dari '${db.name}'. Periksa koneksi atau setelan Google Sheet.`
+        title: `[${db.name}] Gagal Memeriksa Jadwal`, // Judul diubah
+        body: `Tidak bisa mengambil data. Periksa koneksi atau setelan Google Sheet.`
       }).show();
     }
-  }
-
-  // Bagian ini tetap sama, untuk mengelompokkan dan menampilkan notifikasi
-  const upcomingGroups = {};
-  allUpcomingServices.forEach(s => {
-    if (!upcomingGroups[s.days]) upcomingGroups[s.days] = [];
-    upcomingGroups[s.days].push(s.name);
-  });
-
-  for (const days in upcomingGroups) {
-    const customerCount = upcomingGroups[days].length;
-    if (customerCount === 0) continue;
-
-    let timeText = (days === '0') ? 'HARI INI' : (days === '1' ? 'BESOK' : `dalam ${days} hari`);
-    const bodyMessage = `Ada ${customerCount} pelanggan dengan jadwal servis ${timeText}.`;
-
-    new Notification({ title: 'Pengingat Jadwal Servis', body: bodyMessage }).show();
-  }
-
-  if (allOverdueServices.length > 0) {
-    const bodyMessage = `Perhatian, ada ${allOverdueServices.length} pelanggan yang jadwal servisnya terlewat.`;
-    new Notification({ title: 'Jadwal Servis Terlewat!', body: bodyMessage }).show();
-  }
-
-  if (allContactOverdue.length > 0) {
-    const bodyMessage = `Ada ${allContactOverdue.length} pelanggan berstatus "tidak bisa dihubungi".`;
-    new Notification({ title: 'Kontak Perlu Follow Up', body: bodyMessage }).show();
-  }
+  } // Akhir dari perulangan database
 }
 
 // --- Main Window & App Lifecycle ---
