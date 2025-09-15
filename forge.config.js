@@ -5,7 +5,8 @@ const { VitePlugin } = require('@electron-forge/plugin-vite'); // Import the Vit
 module.exports = {
   packagerConfig: {
     asar: true,
-    icon: 'assets/Logo_Solahart' // Path without extension is fine
+    icon: 'assets/Logo_Solahart',
+    extraResource: ['scripts']
   },
   rebuildConfig: {},
   makers: [
