@@ -1,6 +1,5 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
-// "Jembatan" aman antara Frontend (Renderer) dan Backend (Main Process)
 contextBridge.exposeInMainWorld('electronAPI', {
     // --- Fungsi untuk Dashboard ---
     getDatabases: () => ipcRenderer.invoke('get-databases'),
