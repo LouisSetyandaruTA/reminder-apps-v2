@@ -6,7 +6,7 @@ module.exports = {
   packagerConfig: {
     asar: true,
     icon: 'assets/Logo_Solahart',
-    extraResource: ['scripts'],
+    extraResource: ['scripts', 'python-portable/mac', 'python-portable/win'],
     osxSign: {}
   },
   rebuildConfig: {},

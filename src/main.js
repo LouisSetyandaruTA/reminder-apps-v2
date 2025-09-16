@@ -692,12 +692,28 @@ ipcMain.handle('export-data', async (event, spreadsheetId) => {
       ? path.join(process.resourcesPath, 'scripts')
       : 'scripts';
 
-    const pythonExecutable = isPackaged ? null : (process.platform === 'win32' ? 'venv\\Scripts\\python.exe' : 'venv/bin/python');
-    const scriptFile = 'export_data.py';
+    // const pythonExecutable = isPackaged ? null : (process.platform === 'win32' ? 'venv\\Scripts\\python.exe' : 'venv/bin/python');
+    // const scriptFile = 'export_data.py';
 
-    console.log(`Running export script. Packaged: ${isPackaged}`);
-    console.log(`Script path: ${path.join(scriptPath, scriptFile)}`);
-    console.log(`Python path: ${pythonExecutable}`);
+    if (isPackaged) {
+      const platform = process.platform; // 'darwin' untuk Mac, 'win32' untuk Windows
+      let portablePythonBase;
+
+      if (platform === 'win32') {
+        portablePythonBase = path.join(process.resourcesPath, 'python-portable', 'win', 'python');
+        pythonPath = path.join(portablePythonBase, 'python.exe');
+      } else { // Asumsi 'darwin' (macOS)
+        // --- PERUBAHAN DI SINI ---
+        // Menambahkan 'install' ke dalam path untuk Mac
+        portablePythonBase = path.join(process.resourcesPath, 'python-portable', 'mac', 'python', 'install');
+        pythonPath = path.join(portablePythonBase, 'bin', 'python3');
+      }
+    } else {
+      // Development tetap menggunakan venv (tidak berubah)
+      pythonPath = process.platform === 'win32' ? 'venv\\Scripts\\python.exe' : 'venv/bin/python';
+    }
+
+    console.log(`Using Python at: ${pythonPath}`);
 
     const options = {
       mode: 'text',
@@ -710,7 +726,7 @@ ipcMain.handle('export-data', async (event, spreadsheetId) => {
 
     const finalXlsxPath = `${baseOutputPath}.xlsx`;
     const finalCsvPath = `${baseOutputPath}.csv`;
-    // Mengembalikan pesan sukses yang jelas
+
     return { success: true, path: `File berhasil disimpan di:\n${finalXlsxPath}\ndan\n${finalCsvPath}` };
   } catch (err) {
     console.error('Gagal menjalankan proses ekspor:', err);
@@ -744,8 +760,26 @@ ipcMain.handle('import-data', async (event, spreadsheetId) => {
   try {
     const isPackaged = app.isPackaged;
     const scriptPath = isPackaged ? path.join(process.resourcesPath, 'scripts') : 'scripts';
-    const pythonExecutable = isPackaged ? null : (process.platform === 'win32' ? 'venv\\Scripts\\python.exe' : 'venv/bin/python');
-    const scriptFile = 'import_data.py';
+
+    // const pythonExecutable = isPackaged ? null : (process.platform === 'win32' ? 'venv\\Scripts\\python.exe' : 'venv/bin/python');
+    // const scriptFile = 'import_data.py';
+
+    if (isPackaged) {
+      const platform = process.platform;
+      let portablePythonBase;
+
+      if (platform === 'win32') {
+        portablePythonBase = path.join(process.resourcesPath, 'python-portable', 'win', 'python');
+        pythonPath = path.join(portablePythonBase, 'python.exe');
+      } else {
+        portablePythonBase = path.join(process.resourcesPath, 'python-portable', 'mac', 'python', 'install');
+        pythonPath = path.join(portablePythonBase, 'bin', 'python3');
+      }
+    } else {
+      pythonPath = process.platform === 'win32' ? 'venv\\Scripts\\python.exe' : 'venv/bin/python';
+    }
+
+    console.log(`Using Python at: ${pythonPath}`);
 
     const options = {
       mode: 'text',
