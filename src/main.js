@@ -668,19 +668,17 @@ ipcMain.handle('open-whatsapp', (event, phone) => {
   shell.openExternal(`https://wa.me/${internationalPhone}`);
 });
 
+// --- FUNGSI EKSPOR ---
 ipcMain.handle('export-data', async (event, spreadsheetId) => {
   const saveDialogResult = await dialog.showSaveDialog({
     title: 'Pilih Lokasi dan Nama Dasar untuk File Ekspor',
     defaultPath: `export-data-${formatDateToYYYYMMDD(new Date())}`,
-    // Menghilangkan filter agar pengguna fokus pada nama dasar.
-    // Skrip Python akan menambahkan ekstensi .xlsx dan .csv secara otomatis.
   });
 
   if (saveDialogResult.canceled || !saveDialogResult.filePath) {
     return { success: false, error: 'Proses ekspor dibatalkan.' };
   }
 
-  // FilePath dari dialog akan menjadi nama dasar.
   const baseOutputPath = saveDialogResult.filePath;
   let tempJsonPath = null;
 
@@ -692,7 +690,7 @@ ipcMain.handle('export-data', async (event, spreadsheetId) => {
     const isPackaged = app.isPackaged;
     const scriptPath = isPackaged
       ? path.join(process.resourcesPath, 'scripts')
-      : 'scripts'; // Path relatif dari root proyek saat development
+      : 'scripts';
 
     const pythonExecutable = isPackaged ? null : (process.platform === 'win32' ? 'venv\\Scripts\\python.exe' : 'venv/bin/python');
     const scriptFile = 'export_data.py';
@@ -704,7 +702,7 @@ ipcMain.handle('export-data', async (event, spreadsheetId) => {
     const options = {
       mode: 'text',
       scriptPath: scriptPath,
-      args: [tempJsonPath, baseOutputPath], // Kirim baseOutputPath ke skrip Python
+      args: [tempJsonPath, baseOutputPath],
       ...(pythonExecutable && { pythonPath: pythonExecutable })
     };
 
@@ -725,7 +723,7 @@ ipcMain.handle('export-data', async (event, spreadsheetId) => {
   }
 });
 
-// --- PERBAIKAN FUNGSI IMPOR ---
+// --- FUNGSI IMPOR ---
 ipcMain.handle('import-data', async (event, spreadsheetId) => {
   const openDialogResult = await dialog.showOpenDialog({
     title: 'Pilih File untuk Diimpor',
