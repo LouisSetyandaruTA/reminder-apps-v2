@@ -692,24 +692,21 @@ ipcMain.handle('export-data', async (event, spreadsheetId) => {
       ? path.join(process.resourcesPath, 'scripts')
       : 'scripts';
 
-    // const pythonExecutable = isPackaged ? null : (process.platform === 'win32' ? 'venv\\Scripts\\python.exe' : 'venv/bin/python');
-    // const scriptFile = 'export_data.py';
+    const scriptFile = 'export_data.py';
+    let pythonPath;
 
     if (isPackaged) {
-      const platform = process.platform; // 'darwin' untuk Mac, 'win32' untuk Windows
+      const platform = process.platform;
       let portablePythonBase;
 
       if (platform === 'win32') {
-        portablePythonBase = path.join(process.resourcesPath, 'python-portable', 'win', 'python');
+        portablePythonBase = path.join(process.resourcesPath, 'python-portable', 'win', 'python', 'install');
         pythonPath = path.join(portablePythonBase, 'python.exe');
       } else { // Asumsi 'darwin' (macOS)
-        // --- PERUBAHAN DI SINI ---
-        // Menambahkan 'install' ke dalam path untuk Mac
         portablePythonBase = path.join(process.resourcesPath, 'python-portable', 'mac', 'python', 'install');
         pythonPath = path.join(portablePythonBase, 'bin', 'python3');
       }
     } else {
-      // Development tetap menggunakan venv (tidak berubah)
       pythonPath = process.platform === 'win32' ? 'venv\\Scripts\\python.exe' : 'venv/bin/python';
     }
 
@@ -719,7 +716,7 @@ ipcMain.handle('export-data', async (event, spreadsheetId) => {
       mode: 'text',
       scriptPath: scriptPath,
       args: [tempJsonPath, baseOutputPath],
-      ...(pythonExecutable && { pythonPath: pythonExecutable })
+      pythonPath: pythonPath
     };
 
     await PythonShell.run(scriptFile, options);
@@ -761,15 +758,15 @@ ipcMain.handle('import-data', async (event, spreadsheetId) => {
     const isPackaged = app.isPackaged;
     const scriptPath = isPackaged ? path.join(process.resourcesPath, 'scripts') : 'scripts';
 
-    // const pythonExecutable = isPackaged ? null : (process.platform === 'win32' ? 'venv\\Scripts\\python.exe' : 'venv/bin/python');
-    // const scriptFile = 'import_data.py';
+    const scriptFile = 'import_data.py';
+    let pythonPath;
 
     if (isPackaged) {
       const platform = process.platform;
       let portablePythonBase;
 
       if (platform === 'win32') {
-        portablePythonBase = path.join(process.resourcesPath, 'python-portable', 'win', 'python');
+        portablePythonBase = path.join(process.resourcesPath, 'python-portable', 'win', 'python', 'install');
         pythonPath = path.join(portablePythonBase, 'python.exe');
       } else {
         portablePythonBase = path.join(process.resourcesPath, 'python-portable', 'mac', 'python', 'install');
@@ -785,7 +782,7 @@ ipcMain.handle('import-data', async (event, spreadsheetId) => {
       mode: 'text',
       scriptPath: scriptPath,
       args: [inputFile, tempDir],
-      ...(pythonExecutable && { pythonPath: pythonExecutable })
+      pythonPath: pythonPath
     };
 
     await PythonShell.run(scriptFile, options);
