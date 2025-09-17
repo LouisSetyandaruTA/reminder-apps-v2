@@ -9,6 +9,8 @@ import csv from 'csv-parser';
 import fs from 'fs';
 import os from 'os';
 
+require('update-electron-app')();
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -37,9 +39,8 @@ function writeDatabases(databases) {
 
 // --- Helper Functions ---
 /**
- * Memformat nama kota: huruf pertama kapital, sisanya kecil, dan hapus spasi ekstra.
- * @param {string} city Nama kota yang akan diformat.
- * @returns {string} Nama kota yang sudah diformat.
+ * @param {string} city
+ * @returns {string}
  */
 function formatCityName(city) {
   if (!city || typeof city !== 'string') return '';

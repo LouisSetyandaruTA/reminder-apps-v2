@@ -11,6 +11,10 @@
     "publish": "electron-forge publish",
     "lint": "echo \"No linting configured\""
   },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/LouisSetyandaruTA/reminder-apps-v2"
+  },
   "keywords": [],
   "author": {
     "name": "LouisSetyandaru",
@@ -40,6 +44,7 @@
     "node-schedule": "^2.1.1",
     "python-shell": "^5.0.0",
     "react": "^19.1.1",
-    "react-dom": "^19.1.1"
+    "react-dom": "^19.1.1",
+    "update-electron-app": "^3.1.1"
   }
 }
