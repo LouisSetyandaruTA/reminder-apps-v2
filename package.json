@@ -1,6 +1,6 @@
 {
   "name": "reminder-apps-v2",
-  "productName": "reminder-apps-v2",
+  "productName": "UbinKayu Reminder",
   "version": "1.0.0",
   "description": "My Electron application description",
   "main": ".vite/build/main.js",

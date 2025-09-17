@@ -14,6 +14,10 @@ const __dirname = path.dirname(__filename);
 
 const dbPath = path.join(app.getPath('userData'), 'databases.json');
 
+if (process.platform === 'win32') {
+  app.setAppUserModelId('UbinKayu Reminder');
+}
+
 // --- PENGELOLAAN DATABASE (JSON) ---
 function readDatabases() {
   try {
@@ -37,9 +41,8 @@ function writeDatabases(databases) {
 
 // --- Helper Functions ---
 /**
- * Memformat nama kota: huruf pertama kapital, sisanya kecil, dan hapus spasi ekstra.
- * @param {string} city Nama kota yang akan diformat.
- * @returns {string} Nama kota yang sudah diformat.
+ * @param {string} city
+ * @returns {string}
  */
 function formatCityName(city) {
   if (!city || typeof city !== 'string') return '';
@@ -702,7 +705,7 @@ ipcMain.handle('export-data', async (event, spreadsheetId) => {
       if (platform === 'win32') {
         portablePythonBase = path.join(process.resourcesPath, 'python-portable', 'win', 'python', 'install');
         pythonPath = path.join(portablePythonBase, 'python.exe');
-      } else { // Asumsi 'darwin' (macOS)
+      } else {
         portablePythonBase = path.join(process.resourcesPath, 'python-portable', 'mac', 'python', 'install');
         pythonPath = path.join(portablePythonBase, 'bin', 'python3');
       }

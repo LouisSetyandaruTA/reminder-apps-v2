@@ -38,16 +38,13 @@ module.exports = {
     },
   ],
   plugins: [
-    // Use the VitePlugin constructor for proper initialization
     new VitePlugin({
       build: [
         {
-          // The 'main' process entry file
           entry: 'src/main.js',
           config: 'vite.main.config.mjs',
         },
         {
-          // The 'preload' script entry file
           entry: 'src/preload.js',
           config: 'vite.preload.config.mjs',
         },
@@ -64,14 +61,14 @@ module.exports = {
       ],
     }),
 
-    // new FusesPlugin({
-    //   version: FuseVersion.V1,
-    //   [FuseV1Options.RunAsNode]: false,
-    //   [FuseV1Options.EnableCookieEncryption]: true,
-    //   [FuseV1Options.EnableNodeOptionsEnvironmentVariable]: false,
-    //   [FuseV1Options.EnableNodeCliInspectArguments]: false,
-    //   [FuseV1Options.EnableEmbeddedAsarIntegrityValidation]: true,
-    //   [FuseV1Options.OnlyLoadAppFromAsar]: true,
-    // }),
+    new FusesPlugin({
+      version: FuseVersion.V1,
+      [FuseV1Options.RunAsNode]: false,
+      [FuseV1Options.EnableCookieEncryption]: true,
+      [FuseV1Options.EnableNodeOptionsEnvironmentVariable]: false,
+      [FuseV1Options.EnableNodeCliInspectArguments]: false,
+      [FuseV1Options.EnableEmbeddedAsarIntegrityValidation]: true,
+      [FuseV1Options.OnlyLoadAppFromAsar]: true,
+    }),
   ],
 };
