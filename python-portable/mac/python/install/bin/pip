@@ -1,6 +1,4 @@
-#!/bin/sh
-'''exec' "$(dirname -- "$(realpath -- "$0")")/python3.10" "$0" "$@"
-' '''
+#!/Users/erwinwidyanto/Documents/reminder-apps-v2/python-portable/mac/python/install/bin/python3
 # -*- coding: utf-8 -*-
 import re
 import sys
