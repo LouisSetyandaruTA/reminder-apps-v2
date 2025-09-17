@@ -90,3 +90,6 @@ typings/
 
 # Electron-Forge
 out/
+
+# File kredensial sensitif
+credentials.json
