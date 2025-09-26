@@ -284,7 +284,6 @@ async function checkUpcomingServices() {
 
       // --- PEMBUATAN NOTIFIKASI (SEKARANG PER DATABASE) ---
 
-      // 1. Notifikasi untuk jadwal yang akan datang
       const upcomingGroups = {};
       allUpcomingServices.forEach(s => {
         if (!upcomingGroups[s.days]) upcomingGroups[s.days] = [];
@@ -299,25 +298,23 @@ async function checkUpcomingServices() {
         const bodyMessage = `Ada ${customerCount} pelanggan dengan jadwal servis ${timeText}.`;
 
         new Notification({
-          title: `[${db.name}] Pengingat Jadwal Servis`, // Judul diubah
+          title: `[${db.name}] Pengingat Jadwal Servis`,
           body: bodyMessage
         }).show();
       }
 
-      // 2. Notifikasi untuk jadwal yang sudah terlewat
       if (allOverdueServices.length > 0) {
         const bodyMessage = `Perhatian, ada ${allOverdueServices.length} pelanggan yang jadwal servisnya terlewat.`;
         new Notification({
-          title: `[${db.name}] Jadwal Servis Terlewat!`, // Judul diubah
+          title: `[${db.name}] Jadwal Servis Terlewat!`,
           body: bodyMessage
         }).show();
       }
 
-      // 3. Notifikasi untuk kontak yang perlu di-follow up
       if (allContactOverdue.length > 0) {
         const bodyMessage = `Ada ${allContactOverdue.length} pelanggan berstatus "tidak bisa dihubungi".`;
         new Notification({
-          title: `[${db.name}] Kontak Perlu Follow Up`, // Judul diubah
+          title: `[${db.name}] Kontak Perlu Follow Up`,
           body: bodyMessage
         }).show();
       }
@@ -325,11 +322,11 @@ async function checkUpcomingServices() {
     } catch (error) {
       console.error(`Gagal memeriksa notifikasi untuk database '${db.name}':`, error.message);
       new Notification({
-        title: `[${db.name}] Gagal Memeriksa Jadwal`, // Judul diubah
+        title: `[${db.name}] Gagal Memeriksa Jadwal`,
         body: `Tidak bisa mengambil data. Periksa koneksi atau setelan Google Sheet.`
       }).show();
     }
-  } // Akhir dari perulangan database
+  }
 }
 
 // --- Main Window & App Lifecycle ---

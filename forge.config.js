@@ -1,12 +1,13 @@
 const { FusesPlugin } = require('@electron-forge/plugin-fuses');
 const { FuseV1Options, FuseVersion } = require('@electron/fuses');
-const { VitePlugin } = require('@electron-forge/plugin-vite'); // Import the VitePlugin class
+const { VitePlugin } = require('@electron-forge/plugin-vite');
 
 module.exports = {
   packagerConfig: {
     asar: true,
     icon: 'assets/Logo_Solahart',
     extraResource: ['scripts', 'python-portable'],
+    arch: ['x86_64', 'arm64'],
     osxSign: {}
   },
   rebuildConfig: {},

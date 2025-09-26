@@ -184,9 +184,6 @@ document.addEventListener('DOMContentLoaded', () => {
         cityFilterSelect.value = selectedValue;
     }
 
-    // --- LOGIKA BARU UNTUK MODAL CATATAN ---
-
-    // Fungsi ini hanya mengubah UI antara mode lihat dan mode edit
     function setNotesModalMode(mode) {
         const viewContainer = document.getElementById('notes-view-container');
         const editContainer = document.getElementById('notes-edit-container');
@@ -198,7 +195,7 @@ document.addEventListener('DOMContentLoaded', () => {
             editContainer.classList.remove('hidden');
             viewActions.classList.add('hidden');
             editActions.classList.remove('hidden');
-        } else { // mode 'view'
+        } else {
             viewContainer.classList.remove('hidden');
             editContainer.classList.add('hidden');
             viewActions.classList.remove('hidden');
@@ -206,17 +203,14 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // Fungsi untuk menampilkan catatan dalam format poin-poin
     function updateNotesModalContent(customer) {
-        selectedCustomer = customer; // Selalu update customer terpilih
+        selectedCustomer = customer;
         const modalContent = document.getElementById('notes-modal-content');
         const notes = customer.customerNotes || '';
 
         if (notes.trim()) {
-            // Pisahkan catatan per baris baru
             modalContent.innerHTML = notes.split('\n')
                 .filter(line => line.trim() !== '')
-                // PERBAIKAN: Tambahkan bullet point (•) di awal setiap baris saat view
                 .map(line => `<p class="my-1">• ${line.trim().replace(/^•\s*/, '')}</p>`)
                 .join('');
         } else {
@@ -224,10 +218,9 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // Fungsi utama untuk membuka modal catatan
     function showCustomerNotes(customer) {
         document.getElementById('notes-modal-customer-name').textContent = customer.name;
-        setNotesModalMode('view'); // Selalu mulai dalam mode lihat
+        setNotesModalMode('view');
         updateNotesModalContent(customer);
         openModal(customerNotesModal);
     }
@@ -342,7 +335,18 @@ document.addEventListener('DOMContentLoaded', () => {
                         const daysDiff = Math.ceil((nextServiceDate - today) / (1000 * 60 * 60 * 24));
                         return daysDiff >= 0 && daysDiff <= 30;
                     }
-                    case 'contacted': return customer.status === 'COMPLETED';
+                    case 'contacted': {
+                        if (!customer.nextService) return false;
+
+                        const hasCompletedService = customer.services.some(s => s.status === 'COMPLETED' && new Date(s.date) <= today);
+                        if (!hasCompletedService) return false;
+
+                        const nextServiceDate = new Date(customer.nextService);
+                        if (isNaN(nextServiceDate.getTime())) return false;
+
+                        const daysDiff = Math.ceil((nextServiceDate - today) / (1000 * 3600 * 24));
+                        return daysDiff > 30;
+                    }
                     case 'not_contacted': return customer.status === 'UPCOMING';
                     case 'contact_overdue': return customer.status === 'OVERDUE';
                     default: return true;
@@ -389,7 +393,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         </button>
                     </div>
                 `;
-            } else { // List view
+            } else {
                 card.innerHTML = `
                     <div data-action="open-details" class="flex items-center gap-4 flex-grow min-w-0 cursor-pointer">
                         <h3 class="text-lg font-bold text-gray-900 truncate">${customer.name}</h3>
@@ -411,10 +415,6 @@ document.addEventListener('DOMContentLoaded', () => {
             customerListContainer.appendChild(card);
         });
 
-        // =================================================================
-        // === PERBAIKAN LOGIKA STATISTIK DIMULAI DI SINI ===
-        // =================================================================
-
         document.getElementById('stats-total').textContent = customers.length;
         document.getElementById('stats-overdue').textContent = customers.filter(c => calculatePriority(c) === 'Sangat Mendesak').length;
         document.getElementById('stats-due-month').textContent = customers.filter(c => {
@@ -426,17 +426,12 @@ document.addEventListener('DOMContentLoaded', () => {
         }).length;
         document.getElementById('stats-contact-overdue').textContent = customers.filter(c => c.status === 'OVERDUE').length;
 
-        // --- Logika Baru untuk "Sudah Dihubungi" ---
-        // Dihitung sebagai "sudah" jika layanan terakhirnya selesai DAN
-        // jadwal berikutnya masih lebih dari 30 hari lagi.
         const contactedCount = customers.filter(c => {
-            if (!c.nextService) return false; // Harus punya jadwal berikutnya
+            if (!c.nextService) return false;
 
-            // Cek apakah ada layanan yang sudah selesai di masa lalu
             const hasCompletedService = c.services.some(s => s.status === 'COMPLETED' && new Date(s.date) <= today);
             if (!hasCompletedService) return false;
 
-            // Cek apakah jadwal berikutnya lebih dari 30 hari dari sekarang
             const nextServiceDate = new Date(c.nextService);
             if (isNaN(nextServiceDate.getTime())) return false;
             const daysDiff = Math.ceil((nextServiceDate - today) / (1000 * 3600 * 24));
@@ -445,9 +440,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }).length;
         document.getElementById('stats-contacted').textContent = contactedCount;
 
-        // --- Logika Baru untuk "Belum Dihubungi" ---
-        // Dihitung sebagai "belum" jika statusnya UPCOMING dan jadwalnya
-        // dalam 30 hari ke depan.
         const notContactedCount = customers.filter(c => {
             if (c.status !== 'UPCOMING' || !c.nextService) return false;
 
@@ -455,14 +447,9 @@ document.addEventListener('DOMContentLoaded', () => {
             if (isNaN(nextServiceDate.getTime())) return false;
             const daysDiff = Math.ceil((nextServiceDate - today) / (1000 * 3600 * 24));
 
-            // Termasuk yang sudah terlewat (daysDiff < 0)
             return daysDiff <= 30;
         }).length;
         document.getElementById('stats-not-contacted').textContent = notContactedCount;
-
-        // =================================================================
-        // === AKHIR DARI PERBAIKAN LOGIKA STATISTIK ===
-        // =================================================================
 
         lucide.createIcons();
     };
@@ -638,7 +625,6 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('edit-notes-btn').addEventListener('click', () => {
             setNotesModalMode('edit');
             const notesEditor = document.getElementById('notes-editor-textarea');
-            // Format catatan yang ada menjadi daftar bullet untuk diedit
             const currentNotes = (selectedCustomer.customerNotes || '').split('\n')
                 .filter(line => line.trim() !== '')
                 .map(line => line.trim().startsWith('•') ? line.trim() : `• ${line.trim()}`)
@@ -658,7 +644,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 const { selectionStart, selectionEnd, value } = textarea;
                 const newValue = `${value.substring(0, selectionStart)}\n• ${value.substring(selectionEnd)}`;
                 textarea.value = newValue;
-                // Pindahkan kursor ke setelah bullet point yang baru
                 textarea.selectionStart = textarea.selectionEnd = selectionStart + 3;
             }
         });
