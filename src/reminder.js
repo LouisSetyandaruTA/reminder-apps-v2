@@ -314,6 +314,8 @@ document.addEventListener('DOMContentLoaded', () => {
             ? 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4'
             : 'flex flex-col gap-4';
 
+        const dayInMs = 1000 * 60 * 60 * 24; // Standardize for consistency
+
         const sortedAndFilteredCustomers = customers
             .filter(customer => {
                 if (!customer || !customer.name) return false;
@@ -326,30 +328,46 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (!matchesSearch) return false;
 
                 switch (filterBy) {
-                    case 'all': return true;
-                    case 'overdue': return calculatePriority(customer) === 'Sangat Mendesak';
+                    case 'all':
+                        return true;
+                    case 'overdue':
+                        return calculatePriority(customer) === 'Sangat Mendesak';
                     case 'upcoming': {
                         if (!customer.nextService) return false;
                         const nextServiceDate = new Date(customer.nextService);
                         if (isNaN(nextServiceDate.getTime())) return false;
-                        const daysDiff = Math.ceil((nextServiceDate - today) / (1000 * 60 * 60 * 24));
+                        const daysDiff = Math.ceil((nextServiceDate - today) / dayInMs);
                         return daysDiff >= 0 && daysDiff <= 30;
+                    }
+                    // LOGIKA BARU DITAMBAHKAN DI SINI
+                    case 'upcoming_2_months': {
+                        if (!customer.nextService) return false;
+                        const nextServiceDate = new Date(customer.nextService);
+                        if (isNaN(nextServiceDate.getTime())) return false;
+                        const daysDiff = Math.ceil((nextServiceDate - today) / dayInMs);
+                        // Filter untuk rentang waktu 0 hingga 60 hari
+                        return daysDiff >= 0 && daysDiff <= 60;
                     }
                     case 'contacted': {
                         if (!customer.nextService) return false;
-
                         const hasCompletedService = customer.services.some(s => s.status === 'COMPLETED' && new Date(s.date) <= today);
                         if (!hasCompletedService) return false;
-
                         const nextServiceDate = new Date(customer.nextService);
                         if (isNaN(nextServiceDate.getTime())) return false;
-
-                        const daysDiff = Math.ceil((nextServiceDate - today) / (1000 * 3600 * 24));
+                        const daysDiff = Math.ceil((nextServiceDate - today) / dayInMs);
                         return daysDiff > 30;
                     }
-                    case 'not_contacted': return customer.status === 'UPCOMING';
-                    case 'contact_overdue': return customer.status === 'OVERDUE';
-                    default: return true;
+                    case 'not_contacted': {
+                        if (customer.status !== 'UPCOMING' || !customer.nextService) return false;
+                        const nextServiceDate = new Date(customer.nextService);
+                        if (isNaN(nextServiceDate.getTime())) return false;
+                        const daysDiff = Math.ceil((nextServiceDate - today) / dayInMs);
+                        return daysDiff <= 30;
+                    }
+                    case 'contact_overdue':
+                        return customer.status === 'OVERDUE';
+                    default:
+                        return true;
                 }
             })
             .sort((a, b) => {
@@ -371,46 +389,46 @@ document.addEventListener('DOMContentLoaded', () => {
 
             if (currentView === 'bubble') {
                 card.innerHTML = `
-                    <div data-action="open-details" class="cursor-pointer">
-                        <div class="flex items-center justify-between mb-2">
-                            <h3 class="text-lg font-bold text-gray-900 truncate">${customer.name}</h3>
-                            <span class="px-2 py-0.5 rounded-full text-xs font-medium ${getPriorityColor(priority)}">${priority}</span>
+                <div data-action="open-details" class="cursor-pointer">
+                    <div class="flex items-center justify-between mb-2">
+                        <h3 class="text-lg font-bold text-gray-900 truncate">${customer.name}</h3>
+                        <span class="px-2 py-0.5 rounded-full text-xs font-medium ${getPriorityColor(priority)}">${priority}</span>
+                    </div>
+                    <div class="space-y-1">
+                        <div class="flex items-center gap-2 text-sm text-gray-600">
+                            <i data-lucide="map-pin" class="w-4 h-4"></i>
+                            <span class="truncate">${customer.kota || 'N/A'}</span>
                         </div>
-                        <div class="space-y-1">
-                            <div class="flex items-center gap-2 text-sm text-gray-600">
-                                <i data-lucide="map-pin" class="w-4 h-4"></i>
-                                <span class="truncate">${customer.kota || 'N/A'}</span>
-                            </div>
-                            <div class="flex items-center gap-2 text-sm text-gray-600">
-                                <i data-lucide="calendar" class="w-4 h-4"></i>
-                                <span>${formatDate(customer.nextService)}</span>
-                            </div>
+                        <div class="flex items-center gap-2 text-sm text-gray-600">
+                            <i data-lucide="calendar" class="w-4 h-4"></i>
+                            <span>${formatDate(customer.nextService)}</span>
                         </div>
                     </div>
-                    <div class="border-t mt-3 pt-2 flex justify-end">
-                        <button data-action="view-notes" title="Lihat Catatan Pelanggan" class="text-gray-500 hover:text-blue-600 p-1 rounded-full transition-colors">
-                            <i data-lucide="notebook-text" class="w-5 h-5 pointer-events-none"></i>
-                        </button>
-                    </div>
-                `;
+                </div>
+                <div class="border-t mt-3 pt-2 flex justify-end">
+                    <button data-action="view-notes" title="Lihat Catatan Pelanggan" class="text-gray-500 hover:text-blue-600 p-1 rounded-full transition-colors">
+                        <i data-lucide="notebook-text" class="w-5 h-5 pointer-events-none"></i>
+                    </button>
+                </div>
+            `;
             } else {
                 card.innerHTML = `
-                    <div data-action="open-details" class="flex items-center gap-4 flex-grow min-w-0 cursor-pointer">
-                        <h3 class="text-lg font-bold text-gray-900 truncate">${customer.name}</h3>
-                        <div class="relative pl-4 data-separator hidden md:block">
-                            <span class="text-sm font-medium text-gray-600">${customer.kota || 'N/A'}</span>
-                        </div>
-                        <div class="relative pl-4 data-separator flex-grow min-w-0">
-                            <span class="text-sm font-medium text-gray-600 truncate">Servis Berikutnya: <span class="font-bold">${formatDate(customer.nextService)}</span></span>
-                        </div>
+                <div data-action="open-details" class="flex items-center gap-4 flex-grow min-w-0 cursor-pointer">
+                    <h3 class="text-lg font-bold text-gray-900 truncate">${customer.name}</h3>
+                    <div class="relative pl-4 data-separator hidden md:block">
+                        <span class="text-sm font-medium text-gray-600">${customer.kota || 'N/A'}</span>
                     </div>
-                    <div class="flex-shrink-0 flex items-center gap-3 pl-4">
-                        <span class="px-2 py-0.5 rounded-full text-xs font-medium ${getPriorityColor(priority)}">${priority}</span>
-                        <button data-action="view-notes" title="Lihat Catatan Pelanggan" class="text-gray-500 hover:text-blue-600 p-1 rounded-full transition-colors">
-                             <i data-lucide="notebook-text" class="w-5 h-5 pointer-events-none"></i>
-                        </button>
+                    <div class="relative pl-4 data-separator flex-grow min-w-0">
+                        <span class="text-sm font-medium text-gray-600 truncate">Servis Berikutnya: <span class="font-bold">${formatDate(customer.nextService)}</span></span>
                     </div>
-                `;
+                </div>
+                <div class="flex-shrink-0 flex items-center gap-3 pl-4">
+                    <span class="px-2 py-0.5 rounded-full text-xs font-medium ${getPriorityColor(priority)}">${priority}</span>
+                    <button data-action="view-notes" title="Lihat Catatan Pelanggan" class="text-gray-500 hover:text-blue-600 p-1 rounded-full transition-colors">
+                         <i data-lucide="notebook-text" class="w-5 h-5 pointer-events-none"></i>
+                    </button>
+                </div>
+            `;
             }
             customerListContainer.appendChild(card);
         });
@@ -421,32 +439,27 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!c.nextService) return false;
             const d = new Date(c.nextService);
             if (isNaN(d.getTime())) return false;
-            const diff = Math.ceil((d - today) / (1000 * 60 * 60 * 24));
+            const diff = Math.ceil((d - today) / dayInMs);
             return diff >= 0 && diff <= 30;
         }).length;
         document.getElementById('stats-contact-overdue').textContent = customers.filter(c => c.status === 'OVERDUE').length;
 
         const contactedCount = customers.filter(c => {
             if (!c.nextService) return false;
-
             const hasCompletedService = c.services.some(s => s.status === 'COMPLETED' && new Date(s.date) <= today);
             if (!hasCompletedService) return false;
-
             const nextServiceDate = new Date(c.nextService);
             if (isNaN(nextServiceDate.getTime())) return false;
-            const daysDiff = Math.ceil((nextServiceDate - today) / (1000 * 3600 * 24));
-
+            const daysDiff = Math.ceil((nextServiceDate - today) / dayInMs);
             return daysDiff > 30;
         }).length;
         document.getElementById('stats-contacted').textContent = contactedCount;
 
         const notContactedCount = customers.filter(c => {
             if (c.status !== 'UPCOMING' || !c.nextService) return false;
-
             const nextServiceDate = new Date(c.nextService);
             if (isNaN(nextServiceDate.getTime())) return false;
-            const daysDiff = Math.ceil((nextServiceDate - today) / (1000 * 3600 * 24));
-
+            const daysDiff = Math.ceil((nextServiceDate - today) / dayInMs);
             return daysDiff <= 30;
         }).length;
         document.getElementById('stats-not-contacted').textContent = notContactedCount;
