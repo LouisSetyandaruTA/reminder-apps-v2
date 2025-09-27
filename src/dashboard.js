@@ -13,7 +13,32 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             const email = await window.electronAPI.getClientEmail();
             if (email && shareEmailInstruction) {
-                shareEmailInstruction.innerHTML = `Bagikan Google Sheet Anda ke alamat email berikut dengan akses <strong>Editor</strong>: <br><strong class="text-blue-600 break-all">${email}</strong>`;
+                shareEmailInstruction.innerHTML = `Akses Google Sheet berikut: <a href=\"#\" id=\"open-gsheet-link\" class=\"text-blue-700 underline\">Klik di sini untuk membuka Google Sheet</a> , lalu <strong>buat salinan</strong> Google Sheet tersebut di <strong>Google Drive</strong> anda. <br><br>Bagikan Google Sheet Anda ke alamat email berikut dengan akses <strong>Editor</strong>: <br><strong class=\"text-blue-600 break-all\">${email}</strong> <br><br><a href=\"#\" id=\"open-gdrive-link\" class=\"text-blue-600 underline\">Klik di sini untuk tutorial lebih lanjut</a> `;
+                // Add event listeners for external links
+                setTimeout(() => {
+                    const gsheetLink = document.getElementById('open-gsheet-link');
+                    if (gsheetLink) {
+                        gsheetLink.addEventListener('click', (e) => {
+                            e.preventDefault();
+                            if (window.electronAPI && window.electronAPI.openExternalLink) {
+                                window.electronAPI.openExternalLink('https://docs.google.com/spreadsheets/d/1sUtn897LSfSagB82uOxd5dTS5vHHapuqeJ1gzn7yLoM/edit?usp=sharing');
+                            } else {
+                                alert('Fitur buka di browser tidak tersedia.');
+                            }
+                        });
+                    }
+                    const gdriveLink = document.getElementById('open-gdrive-link');
+                    if (gdriveLink) {
+                        gdriveLink.addEventListener('click', (e) => {
+                            e.preventDefault();
+                            if (window.electronAPI && window.electronAPI.openExternalLink) {
+                                window.electronAPI.openExternalLink('https://drive.google.com/drive/folders/18hZ_Kh5fMtb7gVEoxJUzOkVJvFPM7uMp?usp=sharing');
+                            } else {
+                                alert('Fitur buka di browser tidak tersedia.');
+                            }
+                        });
+                    }
+                }, 0);
             }
         } catch (error) {
             console.error('Gagal memuat client email:', error);

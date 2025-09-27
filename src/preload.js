@@ -22,6 +22,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
     // Fungsi utilitas
     openWhatsapp: (phone) => ipcRenderer.invoke('open-whatsapp', phone),
+    openExternalLink: (url) => ipcRenderer.invoke('open-external-link', url),
 
     // Listener untuk menerima data dari Main ke Renderer
     onLoadSheet: (callback) => ipcRenderer.on('load-sheet', (_event, value) => callback(value)),

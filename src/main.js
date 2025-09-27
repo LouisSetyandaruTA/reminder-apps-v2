@@ -668,6 +668,10 @@ ipcMain.handle('open-whatsapp', (event, phone) => {
   shell.openExternal(`https://wa.me/${internationalPhone}`);
 });
 
+ipcMain.handle('open-external-link', (event, url) => {
+  shell.openExternal(url);
+});
+
 // --- FUNGSI EKSPOR ---
 ipcMain.handle('export-data', async (event, spreadsheetId) => {
   const saveDialogResult = await dialog.showSaveDialog({
