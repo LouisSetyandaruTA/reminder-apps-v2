@@ -463,6 +463,7 @@ ipcMain.handle('add-customer', async (event, { spreadsheetId, customerData }) =>
       Notes: 'Jadwal servis rutin berikutnya',
     });
 
+    checkUpcomingServices();
     return { success: true };
   } catch (error) {
     console.error('Gagal menambah pelanggan:', error);
@@ -879,6 +880,7 @@ ipcMain.handle('import-data', async (event, spreadsheetId) => {
     if (newCustomerRows.length > 0) await customerSheet.addRows(newCustomerRows);
     if (allNewServiceRows.length > 0) await serviceSheet.addRows(allNewServiceRows);
 
+    checkUpcomingServices();
     return { success: true, message: `Berhasil mengimpor ${customersToImport.length} pelanggan baru.` };
   } catch (error) {
     console.error('Gagal melakukan impor:', error);
