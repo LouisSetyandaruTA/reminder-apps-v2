@@ -144,7 +144,7 @@ async function getDataFromSheets(spreadsheetId) {
       name: row.get('Nama'),
       address: row.get('Alamat'),
       phone: row.get('No Telp'),
-      kota: formatCityName(row.get('Kota')), // PERBAIKAN DI SINI
+      kota: formatCityName(row.get('Kota')),
       pemasangan: row.get('Pemasangan'),
       customerNotes: row.get('Notes Pelanggan'),
     });
@@ -209,7 +209,7 @@ async function getFlatDataForExport(spreadsheetId) {
       name: row.get('Nama') || '',
       address: row.get('Alamat') || '',
       phone: row.get('No Telp') || '',
-      kota: formatCityName(row.get('Kota') || ''), // PERBAIKAN DI SINI
+      kota: formatCityName(row.get('Kota') || ''),
       Pemasangan: row.get('Pemasangan') || '',
       customerNotes: row.get('Notes Pelanggan') || '',
     });
@@ -248,11 +248,9 @@ async function checkUpcomingServices() {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
-  // Lakukan perulangan untuk setiap database secara terpisah
   for (const db of databases) {
     console.log(`Mengecek database: ${db.name}...`);
 
-    // Pindahkan deklarasi ke dalam loop agar di-reset untuk setiap database
     let allUpcomingServices = [];
     let allOverdueServices = [];
     let allContactOverdue = [];
@@ -261,7 +259,6 @@ async function checkUpcomingServices() {
       const data = await getDataFromSheets(db.id);
 
       data.forEach(customer => {
-        // Logika untuk jadwal servis (tidak berubah)
         if (customer.nextService && customer.status === 'UPCOMING') {
           const nextServiceDate = new Date(customer.nextService);
           nextServiceDate.setHours(0, 0, 0, 0);
@@ -276,14 +273,12 @@ async function checkUpcomingServices() {
             allOverdueServices.push({ name: customer.name });
           }
         }
-        // Logika untuk kontak (tidak berubah)
         if (customer.status === 'OVERDUE') {
           allContactOverdue.push({ name: customer.name });
         }
       });
 
-      // --- PEMBUATAN NOTIFIKASI (SEKARANG PER DATABASE) ---
-
+      // --- PEMBUATAN NOTIFIKASI ---
       const upcomingGroups = {};
       allUpcomingServices.forEach(s => {
         if (!upcomingGroups[s.days]) upcomingGroups[s.days] = [];
@@ -435,7 +430,7 @@ ipcMain.handle('add-customer', async (event, { spreadsheetId, customerData }) =>
       Nama: customerData.name,
       Alamat: customerData.address,
       'No Telp': customerData.phone,
-      Kota: formatCityName(customerData.kota), // PERBAIKAN DI SINI
+      Kota: formatCityName(customerData.kota),
       'Pemasangan': installationDateString,
       'Notes Pelanggan': customerData.customerNotes || '',
     });
