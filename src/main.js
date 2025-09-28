@@ -270,7 +270,7 @@ async function checkUpcomingServices() {
           const timeDiff = nextServiceDate.getTime() - today.getTime();
           const daysDiff = Math.ceil(timeDiff / (1000 * 3600 * 24));
 
-          if (daysDiff >= 0 && daysDiff <= 7) {
+          if (daysDiff >= 0 && daysDiff <= 3) {
             allUpcomingServices.push({ name: customer.name, days: daysDiff });
           } else if (daysDiff < 0) {
             allOverdueServices.push({ name: customer.name });
