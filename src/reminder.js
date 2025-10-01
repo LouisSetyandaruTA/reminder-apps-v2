@@ -314,7 +314,7 @@ document.addEventListener('DOMContentLoaded', () => {
             ? 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4'
             : 'flex flex-col gap-4';
 
-        const dayInMs = 1000 * 60 * 60 * 24; // Standardize for consistency
+        const dayInMs = 1000 * 60 * 60 * 24;
 
         const sortedAndFilteredCustomers = customers
             .filter(customer => {
@@ -345,7 +345,6 @@ document.addEventListener('DOMContentLoaded', () => {
                         const nextServiceDate = new Date(customer.nextService);
                         if (isNaN(nextServiceDate.getTime())) return false;
                         const daysDiff = Math.ceil((nextServiceDate - today) / dayInMs);
-                        // Filter untuk rentang waktu 0 hingga 60 hari
                         return daysDiff >= 0 && daysDiff <= 60;
                     }
                     case 'contacted': {

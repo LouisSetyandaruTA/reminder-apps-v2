@@ -803,200 +803,214 @@ ipcMain.handle('export-data', async (event, spreadsheetId) => {
 
 ipcMain.handle('import-data-interactive', async (event, spreadsheetId) => {
   event.sender.send('show-loading');
-
+  // Tahap 1: Persiapan dan dialog pembukaan file (tidak berubah)
   const openDialogResult = await dialog.showOpenDialog({
-    title: 'Pilih File untuk Diimpor', properties: ['openFile'],
+    title: 'Pilih File untuk Diimpor',
+    properties: ['openFile'],
     filters: [{ name: 'Excel atau CSV', extensions: ['xlsx', 'csv'] }]
   });
 
   if (openDialogResult.canceled || !openDialogResult.filePaths[0]) {
     event.sender.send('hide-loading');
-    console.log('IMPORT [x]: Proses dibatalkan oleh pengguna.');
     return { success: false, error: 'Proses impor dibatalkan.' };
   }
   const inputFile = openDialogResult.filePaths[0];
-  console.log('IMPORT [2]: File dipilih:', inputFile);
-
   const tempDir = path.join(app.getPath('userData'), 'temp-import');
   if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
   const customersPath = path.join(tempDir, 'customers_to_import.csv');
   const servicesPath = path.join(tempDir, 'services_to_import.csv');
 
   try {
-    console.log('IMPORT [3]: Menjalankan script Python untuk memproses file...');
+    // Tahap 2: Menjalankan Skrip Python (tidak berubah)
+    console.log('IMPORT [3]: Menjalankan script Python...');
+    // ... (kode untuk menjalankan PythonShell tetap sama seperti yang Anda miliki)
     const isPackaged = app.isPackaged;
     const scriptPath = isPackaged ? path.join(process.resourcesPath, 'scripts') : 'scripts';
     const scriptFile = 'import_data.py';
     let pythonPath;
-
     if (isPackaged) {
       const platform = process.platform;
-      let portablePythonBase;
-
-      if (platform === 'win32') {
-        portablePythonBase = path.join(process.resourcesPath, 'python-portable', 'win', 'python', 'install');
-        pythonPath = path.join(portablePythonBase, 'python.exe');
-      } else {
-        portablePythonBase = path.join(process.resourcesPath, 'python-portable', 'mac', 'python', 'install');
-        pythonPath = path.join(portablePythonBase, 'bin', 'python3');
-      }
+      pythonPath = platform === 'win32'
+        ? path.join(process.resourcesPath, 'python-portable', 'win', 'python', 'install', 'python.exe')
+        : path.join(process.resourcesPath, 'python-portable', 'mac', 'python', 'install', 'bin', 'python3');
     } else {
       pythonPath = process.platform === 'win32' ? 'venv\\Scripts\\python.exe' : 'venv/bin/python';
     }
-
-    console.log(`Using Python at: ${pythonPath}`);
-
-    const options = {
+    await PythonShell.run(scriptFile, {
       mode: 'text', scriptPath: scriptPath, args: [inputFile, tempDir], pythonPath: pythonPath
-    };
-    await PythonShell.run(scriptFile, options);
-    console.log('IMPORT [4]: Script Python selesai dieksekusi.');
+    });
+    console.log('IMPORT [4]: Script Python selesai.');
 
+    // Tahap 3: Membaca hasil dari Python
     const customersToImport = [];
     await new Promise((resolve, reject) => fs.createReadStream(customersPath).pipe(csv()).on('data', (row) => customersToImport.push(row)).on('end', resolve).on('error', reject));
-    console.log(`IMPORT [5]: Berhasil membaca ${customersToImport.length} customer dari hasil script.`);
+    const servicesToImport = [];
+    if (fs.existsSync(servicesPath)) {
+      await new Promise((resolve, reject) => fs.createReadStream(servicesPath).pipe(csv()).on('data', (row) => servicesToImport.push(row)).on('end', resolve).on('error', reject));
+    }
 
-    console.log('IMPORT [6]: Mengambil data lama dan membuat indeks...');
+    // ✅ Tahap 4 (OPTIMASI): Baca semua data dari Google Sheet SEKALI SAJA di awal
+    console.log('IMPORT [5-OPT]: Mengambil semua data dari Google Sheet (1x)...');
     const { customerSheet, serviceSheet } = await getSheets(spreadsheetId);
-    const existingCustRows = await customerSheet.getRows();
+    const existingCustRows = await customerSheet.getRows(); // <- BACA CUSTOMER 1x
+    const existingServRows = await serviceSheet.getRows(); // <- BACA SERVICE 1x
 
-    const indexByPhone = new Map(), indexByNameAddress = new Map(), indexByNamePhone = new Map(), customerDataMap = new Map();
+    // ✅ Buat fungsi pembuat ID lokal yang bekerja di memori (tidak ada API call)
+    const latestServSequenceForDay = new Map();
+    existingServRows.forEach(r => {
+      const id = r.get('ServiceID');
+      if (id && id.startsWith('SVC-')) {
+        const datePart = id.substring(4, 12);
+        const seqPart = parseInt(id.slice(-5), 10);
+        const currentMax = latestServSequenceForDay.get(datePart) || 0;
+        if (!isNaN(seqPart) && seqPart > currentMax) {
+          latestServSequenceForDay.set(datePart, seqPart);
+        }
+      }
+    });
+    const generateLocalServiceId = (serviceDate) => {
+      const datePart = formatDateToYYYYMMDD(serviceDate);
+      const nextSeq = (latestServSequenceForDay.get(datePart) || 0) + 1;
+      latestServSequenceForDay.set(datePart, nextSeq); // Update map untuk panggilan berikutnya
+      return `SVC-${datePart}${String(nextSeq).padStart(5, '0')}`;
+    };
+
+    // Tahap 5: Pengecekan Duplikat (menggunakan data yang sudah dibaca)
+    const indexByPhone = new Map(), indexByNameAddress = new Map(), customerDataMap = new Map();
     for (const row of existingCustRows) {
       const customerId = row.get('CustomerID');
-      const customer = { CustomerID: customerId, Nama: row.get('Nama'), Alamat: row.get('Alamat'), 'No Telp': row.get('No Telp'), Kota: row.get('Kota') };
+      const customer = { CustomerID: customerId, Nama: row.get('Nama'), Alamat: row.get('Alamat'), 'No Telp': row.get('No Telp') };
       customerDataMap.set(customerId, customer);
       const phone = normalizePhone(customer['No Telp']), name = normalizeName(customer.Nama), address = normalizeAddress(customer.Alamat);
       if (phone) indexByPhone.set(phone, customerId);
       if (name && address) indexByNameAddress.set(`${name}|${address}`, customerId);
-      if (name && phone) indexByNamePhone.set(`${name}|${phone}`, customerId);
     }
-    console.log('IMPORT [7]: Pembuatan indeks selesai.');
 
-    const operations = [];
-    let hasConflict = false;
+    // Tahap 6: Interaksi dengan pengguna untuk konflik (tidak berubah)
+    const customersToAdd = [];
+    const customersToUpdate = [];
+    let skippedCount = 0;
     let bulkChoice = null;
 
     for (const newCustomer of customersToImport) {
-      const newName = normalizeName(newCustomer.name);
-      const newAddress = normalizeAddress(newCustomer.address);
-      const newPhone = normalizePhone(newCustomer.phone);
-
       let userAction;
-
       if (bulkChoice) {
         userAction = bulkChoice;
-        console.log(`IMPORT [8C]: Menggunakan pilihan bulk "${bulkChoice}" untuk "${newName}".`);
       } else {
-        const potentialConflictIDs = new Set();
-        if (newPhone && indexByPhone.has(newPhone)) potentialConflictIDs.add(indexByPhone.get(newPhone));
-        if (newName && newAddress && indexByNameAddress.has(`${newName}|${newAddress}`)) potentialConflictIDs.add(indexByNameAddress.get(`${newName}|${newAddress}`));
-        if (newName && newPhone && indexByNamePhone.has(`${newName}|${newPhone}`)) potentialConflictIDs.add(indexByNamePhone.get(`${newName}|${newPhone}`));
-
-        if (potentialConflictIDs.size > 0) {
-          hasConflict = true;
-          console.log(`IMPORT [8A]: KONFLIK ditemukan untuk "${newName}". Menunggu keputusan pengguna...`);
+        const newName = normalizeName(newCustomer.name), newAddress = normalizeAddress(newCustomer.address), newPhone = normalizePhone(newCustomer.phone);
+        const conflictId = (newPhone && indexByPhone.get(newPhone)) || (newName && newAddress && indexByNameAddress.get(`${newName}|${newAddress}`));
+        if (conflictId) {
           event.sender.send('hide-loading');
-          const conflictId = potentialConflictIDs.values().next().value;
-          const oldCustomer = customerDataMap.get(conflictId);
-
           const userChoice = await new Promise(resolve => {
             ipcMain.once('conflict-response', (e, choice) => resolve(choice));
-            event.sender.send('open-conflict-dialog', { oldData: oldCustomer, newData: newCustomer });
+            event.sender.send('open-conflict-dialog', { oldData: customerDataMap.get(conflictId), newData: newCustomer });
           });
-          console.log(`IMPORT [9]: Pilihan pengguna diterima: "${userChoice.action}", Apply to All: ${userChoice.applyToAll}`);
-
-          if (userChoice.applyToAll) {
-            bulkChoice = userChoice.action;
-          }
+          if (userChoice.applyToAll) bulkChoice = userChoice.action;
           userAction = userChoice.action;
         } else {
-          console.log(`IMPORT [8B]: Tidak ada konflik untuk "${newName}".`);
           userAction = 'add';
         }
       }
 
       switch (userAction) {
         case 'update':
-          const conflictId = indexByPhone.get(newPhone) || indexByNameAddress.get(`${newName}|${newAddress}`) || indexByNamePhone.get(`${newName}|${newPhone}`);
-          if (conflictId) {
-            operations.push({ action: 'update', customerId: conflictId, data: newCustomer });
-          }
+          const conflictId = (normalizePhone(newCustomer.phone) && indexByPhone.get(normalizePhone(newCustomer.phone))) || indexByNameAddress.get(`${normalizeName(newCustomer.name)}|${normalizeAddress(newCustomer.address)}`);
+          customersToUpdate.push({ customerId: conflictId, data: newCustomer });
           break;
-        case 'duplicate':
-        case 'add':
-          operations.push({ action: 'add', data: newCustomer });
-          break;
-        case 'skip':
-          break;
+        case 'add': case 'duplicate': customersToAdd.push(newCustomer); break;
+        case 'skip': skippedCount++; break;
       }
     }
 
-    if (!hasConflict) {
-      event.sender.send('hide-loading');
+    event.sender.send('show-loading');
+
+    // Tahap 7: Eksekusi Operasi
+    // 7a: Proses Update (satu per satu)
+    for (const op of customersToUpdate) {
+      const rowToUpdate = existingCustRows.find(r => r.get('CustomerID') === op.customerId);
+      if (rowToUpdate) {
+        rowToUpdate.set('Nama', op.data.name);
+        rowToUpdate.set('Alamat', op.data.address);
+        rowToUpdate.set('No Telp', op.data.phone);
+        rowToUpdate.set('Kota', op.data.kota);
+        await rowToUpdate.save(); // Write API Call
+      }
     }
 
-    console.log(`IMPORT [10]: Memulai eksekusi ${operations.length} operasi...`);
-    if (operations.length > 0) {
-      event.sender.send('show-loading');
-      try {
-        const { customerSheet } = await getSheets(spreadsheetId);
-        const existingCustRows = await customerSheet.getRows();
-        const customerRowMap = new Map(existingCustRows.map(r => [r.get('CustomerID'), r]));
-
-        // ✅ 1. Dapatkan nomor urut awal SEKALI SAJA sebelum loop
-        let nextSequence = await getNextGlobalSequence(spreadsheetId);
-
-        for (const op of operations) {
-          if (op.action === 'update') {
-            const rowToUpdate = customerRowMap.get(op.customerId);
-            if (rowToUpdate) {
-              rowToUpdate.set('Nama', op.data.name);
-              rowToUpdate.set('Alamat', op.data.address);
-              rowToUpdate.set('No Telp', op.data.phone);
-              rowToUpdate.set('Kota', op.data.kota);
-              await rowToUpdate.save();
-              console.log(`  -> UPDATED: ${op.data.name}`);
-            }
-          } else if (op.action === 'add' || op.action === 'duplicate') {
-            const datePart = formatDateToYYYYMMDD(new Date());
-
-            // ✅ 2. Gunakan nomor urut lokal yang sudah ada
-            const sequencePart = String(nextSequence).padStart(5, '0');
-            const newCustomerId = `CUST-${datePart}${sequencePart}`;
-
-            // ✅ 3. Naikkan nomor urut untuk data berikutnya
-            nextSequence++;
-
-            await customerSheet.addRow({
-              CustomerID: newCustomerId,
-              Nama: op.data.name,
-              Alamat: op.data.address,
-              'No Telp': op.data.phone,
-              Kota: op.data.kota,
-              'Pemasangan': op.data.installationDate || '',
-              'Notes Pelanggan': '',
-            });
-            console.log(`  -> ADDED: ${op.data.name} with ID ${newCustomerId}`);
-          }
+    // 7b: Proses Tambah Pelanggan & Layanan Baru (Massal & Efisien)
+    if (customersToAdd.length > 0) {
+      let nextCustSeq = 0;
+      existingCustRows.forEach(r => {
+        const id = r.get('CustomerID');
+        if (id && id.startsWith('CUST-')) {
+          const seq = parseInt(id.slice(-5));
+          if (!isNaN(seq) && seq > nextCustSeq) nextCustSeq = seq;
         }
-      } catch (e) {
-        console.error('IMPORT [ERROR]: Gagal saat menulis operasi ke Google Sheet:', e);
-        throw new Error(`Gagal menyimpan data ke Google Sheet: ${e.message}`);
-      } finally {
-        event.sender.send('hide-loading');
-      }
+      });
+      nextCustSeq++; // Mulai dari ID selanjutnya
+
+      const finalCustomerRows = [];
+      const customerIdMap = new Map();
+      customersToAdd.forEach(c => {
+        const datePart = formatDateToYYYYMMDD(new Date());
+        const sequencePart = String(nextCustSeq++).padStart(5, '0');
+        const newId = `CUST-${datePart}${sequencePart}`;
+        finalCustomerRows.push({
+          CustomerID: newId, Nama: c.name, Alamat: c.address, 'No Telp': c.phone, Kota: c.kota,
+          'Pemasangan': c.purchaseDate, 'Notes Pelanggan': c.customerNotes || '',
+        });
+        customerIdMap.set(normalizeName(c.name), newId);
+      });
+
+      const allNewServiceRows = [];
+      const latestServiceMap = new Map();
+      const servicesGroupedByName = servicesToImport.reduce((acc, s) => {
+        const key = normalizeName(s.name);
+        if (!acc[key]) acc[key] = [];
+        acc[key].push(s);
+        return acc;
+      }, {});
+
+      customersToAdd.forEach(c => {
+        const customerNameKey = normalizeName(c.name);
+        const customerId = customerIdMap.get(customerNameKey);
+        if (!customerId) return;
+        const customerServices = servicesGroupedByName[customerNameKey] || [];
+        customerServices.forEach(s => {
+          const serviceDate = new Date(s.serviceDate);
+          allNewServiceRows.push({
+            ServiceID: generateLocalServiceId(serviceDate), // ✅ Gunakan fungsi lokal
+            CustomerID: customerId, ServiceDate: s.serviceDate, Status: 'COMPLETED', Notes: `Riwayat Servis (Data Impor)`,
+          });
+          const currentLatest = latestServiceMap.get(customerId) || new Date(0);
+          if (serviceDate > currentLatest) latestServiceMap.set(customerId, serviceDate);
+        });
+      });
+
+      latestServiceMap.forEach((lastServiceDate, customerId) => {
+        const reminderDate = new Date(lastServiceDate);
+        reminderDate.setMonth(reminderDate.getMonth() + 6);
+        allNewServiceRows.push({
+          ServiceID: generateLocalServiceId(reminderDate), // ✅ Gunakan fungsi lokal
+          CustomerID: customerId, ServiceDate: reminderDate.toISOString().split('T')[0], Status: 'UPCOMING', Notes: 'Jadwal servis rutin berikutnya',
+        });
+      });
+
+      if (finalCustomerRows.length > 0) await customerSheet.addRows(finalCustomerRows);
+      if (allNewServiceRows.length > 0) await serviceSheet.addRows(allNewServiceRows);
     }
-    console.log('IMPORT [11]: Semua operasi selesai.');
 
     clearCache();
-    return { success: true, message: `Proses impor selesai. ${operations.length} operasi telah dilakukan.` };
+    checkUpcomingServices();
+    const message = `Proses impor selesai. ${customersToAdd.length} pelanggan ditambahkan, ${customersToUpdate.length} diperbarui, dan ${skippedCount} dilewati.`;
+    return { success: true, message };
 
   } catch (error) {
-    event.sender.send('hide-loading');
-    console.error('IMPORT [ERROR]: Terjadi kesalahan fatal selama impor:', error);
-    dialog.showErrorBox('Impor Gagal', `Terjadi kesalahan:\n${error.message}`);
+    console.error('Gagal melakukan impor:', error);
+    dialog.showErrorBox('Impor Gagal', `Terjadi kesalahan saat mengimpor data:\n${error.message}`);
     return { success: false, error: error.message };
   } finally {
+    event.sender.send('hide-loading');
     if (fs.existsSync(customersPath)) fs.unlinkSync(customersPath);
     if (fs.existsSync(servicesPath)) fs.unlinkSync(servicesPath);
   }
