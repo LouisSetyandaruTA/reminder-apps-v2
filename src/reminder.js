@@ -314,7 +314,7 @@ document.addEventListener('DOMContentLoaded', () => {
             ? 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4'
             : 'flex flex-col gap-4';
 
-        const dayInMs = 1000 * 60 * 60 * 24; // Standardize for consistency
+        const dayInMs = 1000 * 60 * 60 * 24;
 
         const sortedAndFilteredCustomers = customers
             .filter(customer => {
@@ -345,7 +345,6 @@ document.addEventListener('DOMContentLoaded', () => {
                         const nextServiceDate = new Date(customer.nextService);
                         if (isNaN(nextServiceDate.getTime())) return false;
                         const daysDiff = Math.ceil((nextServiceDate - today) / dayInMs);
-                        // Filter untuk rentang waktu 0 hingga 60 hari
                         return daysDiff >= 0 && daysDiff <= 60;
                     }
                     case 'contacted': {
@@ -549,14 +548,75 @@ document.addEventListener('DOMContentLoaded', () => {
             renderCustomers();
         });
 
+        window.electronAPI.onShowLoading(() => {
+            console.log("RENDERER: Menerima perintah 'show-loading'");
+            showLoading();
+        });
+
+        window.electronAPI.onHideLoading(() => {
+            console.log("RENDERER: Menerima perintah 'hide-loading'");
+            hideLoading();
+        });
+
         document.getElementById('add-customer-btn').addEventListener('click', setupAndOpenAddCustomerModal);
         document.getElementById('refresh-btn').addEventListener('click', () => initializeApp());
         document.getElementById('retry-btn').addEventListener('click', () => initializeApp());
         document.getElementById('export-data-btn').addEventListener('click', () => handleApiCall(window.electronAPI.exportData, null, 'Data berhasil diekspor!', 'Gagal mengekspor data'));
-        document.getElementById('import-data-btn').addEventListener('click', () => {
-            if (confirm('Apakah Anda yakin ingin mengimpor data? Ini akan menambahkan data baru dari file.')) {
-                handleApiCall(window.electronAPI.importData, null, 'Proses impor selesai!', 'Gagal mengimpor data');
+        document.getElementById('import-data-btn').addEventListener('click', async () => {
+            if (!confirm('Memulai proses impor interaktif? Anda mungkin akan diminta untuk menyelesaikan beberapa konflik data.')) {
+                return;
             }
+
+            try {
+                const result = await window.electronAPI.importDataInteractive(activeSheetId);
+                if (result.success) {
+                    alert(result.message || 'Proses impor selesai!');
+                } else {
+                    if (result.error !== 'Proses impor dibatalkan.') {
+                        throw new Error(result.error || 'Terjadi kesalahan tidak diketahui selama impor.');
+                    }
+                }
+            } catch (err) {
+                console.error('Gagal menjalankan proses impor interaktif:', err);
+                alert(`Gagal mengimpor data: ${err.message}`);
+            } finally {
+                console.log('Impor selesai, menyegarkan data aplikasi...');
+                initializeApp();
+            }
+        });
+
+        window.electronAPI.onOpenConflictDialog(({ oldData, newData }) => {
+            const importConflictModal = document.getElementById('import-conflict-modal');
+
+            document.getElementById('conflict-old-name').textContent = oldData.Nama || 'N/A';
+            document.getElementById('conflict-old-address').textContent = oldData.Alamat || 'N/A';
+            document.getElementById('conflict-old-phone').textContent = oldData['No Telp'] || 'N/A';
+
+            document.getElementById('conflict-new-name').textContent = newData.name || 'N/A';
+            document.getElementById('conflict-new-address').textContent = newData.address || 'N/A';
+            document.getElementById('conflict-new-phone').textContent = newData.phone || 'N/A';
+
+            openModal(importConflictModal);
+            document.getElementById('conflict-apply-to-all').checked = false;
+            lucide.createIcons();
+
+            const skipBtn = document.getElementById('conflict-btn-skip');
+            const duplicateBtn = document.getElementById('conflict-btn-duplicate');
+            const updateBtn = document.getElementById('conflict-btn-update');
+
+            const sendResponseAndClose = (action) => {
+                const applyToAll = document.getElementById('conflict-apply-to-all').checked;
+                window.electronAPI.sendConflictResponse({ action, applyToAll });
+                closeModal(importConflictModal);
+
+                skipBtn.onclick = null;
+                duplicateBtn.onclick = null;
+                updateBtn.onclick = null;
+            };
+
+            skipBtn.onclick = () => sendResponseAndClose('skip');
+            duplicateBtn.onclick = () => sendResponseAndClose('duplicate');
+            updateBtn.onclick = () => sendResponseAndClose('update');
         });
 
         contactModalStatus.addEventListener('change', (e) => {
@@ -634,7 +694,6 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
 
-        // --- Event Listener Baru untuk Modal Catatan ---
         document.getElementById('edit-notes-btn').addEventListener('click', () => {
             setNotesModalMode('edit');
             const notesEditor = document.getElementById('notes-editor-textarea');

@@ -542,6 +542,59 @@
                 </div>
             </div>
         </div>
+
+        <div id="import-conflict-modal"
+            class="fixed inset-0 bg-black bg-opacity-60 flex justify-center items-center z-[53] hidden">
+            <div class="bg-white p-6 rounded-lg shadow-xl w-full max-w-2xl">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-xl font-bold text-yellow-600">Konflik Data Ditemukan</h2>
+                </div>
+                <p class="text-sm text-gray-600 mb-6">Data yang Anda impor tampaknya sudah ada di database. Pilih
+                    tindakan yang ingin Anda lakukan.</p>
+
+                <div class="grid grid-cols-2 gap-6">
+                    <div>
+                        <h3 class="font-bold text-lg mb-2 border-b pb-2">Data yang Sudah Ada</h3>
+                        <div class="space-y-2 text-sm">
+                            <p><strong>Nama:</strong> <span id="conflict-old-name"></span></p>
+                            <p><strong>Alamat:</strong> <span id="conflict-old-address"></span></p>
+                            <p><strong>No. Telp:</strong> <span id="conflict-old-phone"></span></p>
+                        </div>
+                    </div>
+                    <div>
+                        <h3 class="font-bold text-lg mb-2 border-b pb-2">Data Baru dari Impor</h3>
+                        <div class="space-y-2 text-sm">
+                            <p><strong>Nama:</strong> <span id="conflict-new-name"></span></p>
+                            <p><strong>Alamat:</strong> <span id="conflict-new-address"></span></p>
+                            <p><strong>No. Telp:</strong> <span id="conflict-new-phone"></span></p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mt-6 flex items-center">
+                    <input id="conflict-apply-to-all" type="checkbox"
+                        class="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500">
+                    <label for="conflict-apply-to-all" class="ml-2 block text-sm text-gray-900">
+                        Lakukan ini untuk semua konflik berikutnya
+                    </label>
+                </div>
+
+                <div class="flex justify-end gap-3 mt-4">
+                    <button id="conflict-btn-skip" class="px-4 py-2 bg-gray-300 rounded-md hover:bg-gray-400">
+                        <i data-lucide="skip-forward" class="inline-block h-4 w-4 mr-2"></i> Lewati (Skip)
+                    </button>
+                    <button id="conflict-btn-duplicate"
+                        class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">
+                        <i data-lucide="copy" class="inline-block h-4 w-4 mr-2"></i> Tetap Tambah (Duplikat)
+                    </button>
+                    <button id="conflict-btn-update"
+                        class="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700">
+                        <i data-lucide="refresh-cw" class="inline-block h-4 w-4 mr-2"></i> Ganti dengan Data Baru
+                        (Update)
+                    </button>
+                </div>
+            </div>
+        </div>
     </div>
 
     <script type="module" src="./src/reminder.js"></script>

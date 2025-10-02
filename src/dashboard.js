@@ -6,7 +6,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const addDbForm = document.getElementById('add-db-form');
     const dbNameInput = document.getElementById('db-name');
     const dbIdInput = document.getElementById('db-id');
-
     const shareEmailInstruction = document.getElementById('share-email-instruction');
 
     async function loadClientEmail() {
@@ -14,7 +13,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const email = await window.electronAPI.getClientEmail();
             if (email && shareEmailInstruction) {
                 shareEmailInstruction.innerHTML = `Akses Google Sheet berikut: <a href=\"#\" id=\"open-gsheet-link\" class=\"text-blue-700 underline\">Klik di sini untuk membuka Google Sheet</a> , lalu <strong>buat salinan</strong> Google Sheet tersebut di <strong>Google Drive</strong> anda. <br><br>Bagikan Google Sheet Anda ke alamat email berikut dengan akses <strong>Editor</strong>: <br><strong class=\"text-blue-600 break-all\">${email}</strong> <br><br><a href=\"#\" id=\"open-gdrive-link\" class=\"text-blue-600 underline\">Klik di sini untuk tutorial lebih lanjut</a> `;
-                // Add event listeners for external links
+
                 setTimeout(() => {
                     const gsheetLink = document.getElementById('open-gsheet-link');
                     if (gsheetLink) {
@@ -70,7 +69,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 </div>
                 <button data-id="${db.id}" class="delete-btn absolute top-3 right-3 p-1 bg-red-100 text-red-600 rounded-full hover:bg-red-200"><i data-lucide="trash-2" class="h-4 w-4 pointer-events-none"></i></button>
             `;
-            // Event listener untuk membuka jendela reminder
+
             card.querySelector('.flex').addEventListener('click', () => {
                 window.electronAPI.openReminderForSheet({ id: db.id, name: db.name });
             });
@@ -79,7 +78,6 @@ document.addEventListener('DOMContentLoaded', () => {
         lucide.createIcons();
     }
 
-    // Event listener untuk tombol hapus
     dbListContainer.addEventListener('click', async (e) => {
         const deleteButton = e.target.closest('.delete-btn');
         if (deleteButton) {
@@ -102,7 +100,6 @@ document.addEventListener('DOMContentLoaded', () => {
         const name = dbNameInput.value;
         const rawInput = dbIdInput.value.trim();
 
-        // Fungsi untuk mengekstrak ID dari URL Google Sheet
         const extractSheetId = (input) => {
             const match = input.match(/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
             return match ? match[1] : input;
