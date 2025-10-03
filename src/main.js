@@ -87,6 +87,19 @@ function formatCityName(city) {
   return trimmedCity.charAt(0).toUpperCase() + trimmedCity.slice(1).toLowerCase();
 }
 
+function normalizeCustomerName(name) {
+  if (!name || typeof name !== 'string') return '';
+
+  const titles = ['bapak', 'bpk', 'bp', 'ibu', 'bu', 'pak', 'mrs', 'mr', 'miss', 'dr', 'drs', 'drg', 'ir', 'prof'];
+  const titleRegex = new RegExp(`^(${titles.join('|')})\\.?\\s+`, 'i');
+  let cleanedName = name.trim().replace(titleRegex, '');
+
+  return cleanedName
+    .toLowerCase()
+    .split(' ')
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
+}
 
 function formatDateToYYYYMMDD(date) {
   const d = new Date(date);
@@ -481,7 +494,7 @@ ipcMain.handle('add-customer', async (event, { spreadsheetId, customerData }) =>
       CustomerID: newCustomerId,
       Nama: customerData.name,
       Alamat: customerData.address,
-      'No Telp': customerData.phone,
+      'No Telp': normalizePhone(customerData.phone),
       Kota: formatCityName(customerData.kota),
       'Pemasangan': installationDateString,
       'Notes Pelanggan': customerData.customerNotes || '',
@@ -664,7 +677,7 @@ ipcMain.handle('update-customer', async (event, { spreadsheetId, customerID, upd
       rowToUpdate.set('Alamat', updatedData.address);
     }
     if (updatedData.phone !== undefined) {
-      rowToUpdate.set('No Telp', updatedData.phone);
+      rowToUpdate.set('No Telp', normalizePhone(updatedData.phone));
     }
     if (updatedData.kota !== undefined) {
       rowToUpdate.set('Kota', formatCityName(updatedData.kota));
@@ -803,7 +816,6 @@ ipcMain.handle('export-data', async (event, spreadsheetId) => {
 
 ipcMain.handle('import-data-interactive', async (event, spreadsheetId) => {
   event.sender.send('show-loading');
-  // Tahap 1: Persiapan dan dialog pembukaan file (tidak berubah)
   const openDialogResult = await dialog.showOpenDialog({
     title: 'Pilih File untuk Diimpor',
     properties: ['openFile'],
@@ -821,9 +833,7 @@ ipcMain.handle('import-data-interactive', async (event, spreadsheetId) => {
   const servicesPath = path.join(tempDir, 'services_to_import.csv');
 
   try {
-    // Tahap 2: Menjalankan Skrip Python (tidak berubah)
     console.log('IMPORT [3]: Menjalankan script Python...');
-    // ... (kode untuk menjalankan PythonShell tetap sama seperti yang Anda miliki)
     const isPackaged = app.isPackaged;
     const scriptPath = isPackaged ? path.join(process.resourcesPath, 'scripts') : 'scripts';
     const scriptFile = 'import_data.py';
@@ -841,7 +851,6 @@ ipcMain.handle('import-data-interactive', async (event, spreadsheetId) => {
     });
     console.log('IMPORT [4]: Script Python selesai.');
 
-    // Tahap 3: Membaca hasil dari Python
     const customersToImport = [];
     await new Promise((resolve, reject) => fs.createReadStream(customersPath).pipe(csv()).on('data', (row) => customersToImport.push(row)).on('end', resolve).on('error', reject));
     const servicesToImport = [];
@@ -849,13 +858,11 @@ ipcMain.handle('import-data-interactive', async (event, spreadsheetId) => {
       await new Promise((resolve, reject) => fs.createReadStream(servicesPath).pipe(csv()).on('data', (row) => servicesToImport.push(row)).on('end', resolve).on('error', reject));
     }
 
-    // ✅ Tahap 4 (OPTIMASI): Baca semua data dari Google Sheet SEKALI SAJA di awal
     console.log('IMPORT [5-OPT]: Mengambil semua data dari Google Sheet (1x)...');
     const { customerSheet, serviceSheet } = await getSheets(spreadsheetId);
-    const existingCustRows = await customerSheet.getRows(); // <- BACA CUSTOMER 1x
-    const existingServRows = await serviceSheet.getRows(); // <- BACA SERVICE 1x
+    const existingCustRows = await customerSheet.getRows();
+    const existingServRows = await serviceSheet.getRows();
 
-    // ✅ Buat fungsi pembuat ID lokal yang bekerja di memori (tidak ada API call)
     const latestServSequenceForDay = new Map();
     existingServRows.forEach(r => {
       const id = r.get('ServiceID');
@@ -871,11 +878,10 @@ ipcMain.handle('import-data-interactive', async (event, spreadsheetId) => {
     const generateLocalServiceId = (serviceDate) => {
       const datePart = formatDateToYYYYMMDD(serviceDate);
       const nextSeq = (latestServSequenceForDay.get(datePart) || 0) + 1;
-      latestServSequenceForDay.set(datePart, nextSeq); // Update map untuk panggilan berikutnya
+      latestServSequenceForDay.set(datePart, nextSeq);
       return `SVC-${datePart}${String(nextSeq).padStart(5, '0')}`;
     };
 
-    // Tahap 5: Pengecekan Duplikat (menggunakan data yang sudah dibaca)
     const indexByPhone = new Map(), indexByNameAddress = new Map(), customerDataMap = new Map();
     for (const row of existingCustRows) {
       const customerId = row.get('CustomerID');
@@ -886,7 +892,6 @@ ipcMain.handle('import-data-interactive', async (event, spreadsheetId) => {
       if (name && address) indexByNameAddress.set(`${name}|${address}`, customerId);
     }
 
-    // Tahap 6: Interaksi dengan pengguna untuk konflik (tidak berubah)
     const customersToAdd = [];
     const customersToUpdate = [];
     let skippedCount = 0;
@@ -924,20 +929,17 @@ ipcMain.handle('import-data-interactive', async (event, spreadsheetId) => {
 
     event.sender.send('show-loading');
 
-    // Tahap 7: Eksekusi Operasi
-    // 7a: Proses Update (satu per satu)
     for (const op of customersToUpdate) {
       const rowToUpdate = existingCustRows.find(r => r.get('CustomerID') === op.customerId);
       if (rowToUpdate) {
-        rowToUpdate.set('Nama', op.data.name);
+        rowToUpdate.set('Nama', normalizeCustomerName(op.data.name));
         rowToUpdate.set('Alamat', op.data.address);
         rowToUpdate.set('No Telp', op.data.phone);
         rowToUpdate.set('Kota', op.data.kota);
-        await rowToUpdate.save(); // Write API Call
+        await rowToUpdate.save();
       }
     }
 
-    // 7b: Proses Tambah Pelanggan & Layanan Baru (Massal & Efisien)
     if (customersToAdd.length > 0) {
       let nextCustSeq = 0;
       existingCustRows.forEach(r => {
@@ -947,7 +949,7 @@ ipcMain.handle('import-data-interactive', async (event, spreadsheetId) => {
           if (!isNaN(seq) && seq > nextCustSeq) nextCustSeq = seq;
         }
       });
-      nextCustSeq++; // Mulai dari ID selanjutnya
+      nextCustSeq++;
 
       const finalCustomerRows = [];
       const customerIdMap = new Map();
@@ -956,7 +958,7 @@ ipcMain.handle('import-data-interactive', async (event, spreadsheetId) => {
         const sequencePart = String(nextCustSeq++).padStart(5, '0');
         const newId = `CUST-${datePart}${sequencePart}`;
         finalCustomerRows.push({
-          CustomerID: newId, Nama: c.name, Alamat: c.address, 'No Telp': c.phone, Kota: c.kota,
+          CustomerID: newId, Nama: normalizeCustomerName(c.name), Alamat: c.address, 'No Telp': c.phone, Kota: c.kota,
           'Pemasangan': c.purchaseDate, 'Notes Pelanggan': c.customerNotes || '',
         });
         customerIdMap.set(normalizeName(c.name), newId);
@@ -979,7 +981,7 @@ ipcMain.handle('import-data-interactive', async (event, spreadsheetId) => {
         customerServices.forEach(s => {
           const serviceDate = new Date(s.serviceDate);
           allNewServiceRows.push({
-            ServiceID: generateLocalServiceId(serviceDate), // ✅ Gunakan fungsi lokal
+            ServiceID: generateLocalServiceId(serviceDate),
             CustomerID: customerId, ServiceDate: s.serviceDate, Status: 'COMPLETED', Notes: `Riwayat Servis (Data Impor)`,
           });
           const currentLatest = latestServiceMap.get(customerId) || new Date(0);
@@ -991,7 +993,7 @@ ipcMain.handle('import-data-interactive', async (event, spreadsheetId) => {
         const reminderDate = new Date(lastServiceDate);
         reminderDate.setMonth(reminderDate.getMonth() + 6);
         allNewServiceRows.push({
-          ServiceID: generateLocalServiceId(reminderDate), // ✅ Gunakan fungsi lokal
+          ServiceID: generateLocalServiceId(reminderDate),
           CustomerID: customerId, ServiceDate: reminderDate.toISOString().split('T')[0], Status: 'UPCOMING', Notes: 'Jadwal servis rutin berikutnya',
         });
       });
