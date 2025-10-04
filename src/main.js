@@ -109,7 +109,15 @@ function formatDateToYYYYMMDD(date) {
   return `${year}${month}${day}`;
 }
 
-function normalizeName(name = '') { return name.toLowerCase().trim(); }
+function normalizeName(name = '') {
+  if (!name || typeof name !== 'string') return '';
+
+  const titles = ['bapak', 'bpk', 'bp', 'ibu', 'bu', 'pak', 'mrs', 'mr', 'miss', 'dr', 'drs', 'drg', 'ir', 'prof'];
+  const titleRegex = new RegExp(`^(${titles.join('|')})\\.?\\s+`, 'i');
+
+  const cleanedName = name.trim().replace(titleRegex, '');
+  return cleanedName.toLowerCase();
+}
 function normalizeAddress(address = '') { return address.toLowerCase().trim(); }
 function normalizePhone(phone = '') {
   const digits = phone.replace(/\D/g, '');
