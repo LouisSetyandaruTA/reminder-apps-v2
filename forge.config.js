@@ -5,7 +5,7 @@ const { VitePlugin } = require('@electron-forge/plugin-vite');
 module.exports = {
   packagerConfig: {
     asar: true,
-    icon: 'assets/Logo_Solahart',
+    icon: 'assets/Logo_Remindify',
     extraResource: ['scripts', 'python-portable'],
     arch: ['x86_64', 'arm64'],
     osxSign: {}
@@ -15,26 +15,26 @@ module.exports = {
     {
       name: '@electron-forge/maker-squirrel',
       config: {
-        setupIcon: 'assets/Logo_Solahart.ico',
+        setupIcon: 'assets/Logo_Remindify.ico',
       },
     },
     {
       name: '@electron-forge/maker-zip',
       platforms: ['darwin'],
       config: {
-        icon: 'assets/Logo_Solahart.icns'
+        icon: 'assets/Logo_Remindify.icns'
       }
     },
     {
       name: '@electron-forge/maker-deb',
       config: {
-        icon: 'assets/Logo_Solahart.png'
+        icon: 'assets/Logo_Remindify.png'
       },
     },
     {
       name: '@electron-forge/maker-rpm',
       config: {
-        icon: 'assets/Logo_Solahart.png'
+        icon: 'assets/Logo_Remindify.png'
       },
     },
   ],
