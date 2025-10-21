@@ -107,7 +107,7 @@
                             <option value="upcoming_2_months">Jatuh Tempo 2 Bulan</option>
                             <option value="contacted">Sudah Dihubungi</option>
                             <option value="not_contacted">Belum Dihubungi</option>
-                            <option value="contact_overdue">Kontak Terlambat</option>
+                            <option value="contact_overdue">Tidak Bisa Dihubungi</option>
                         </select>
                     </div>
                     <div class="flex items-center">
@@ -230,6 +230,19 @@
                                 <option value="6m">6 Bulan</option>
                             </select>
                         </div>
+
+                        <div id="overdue-duration-container" class="hidden">
+                            <label for="contact-modal-overdue-duration"
+                                class="block text-sm font-medium text-gray-700">Tunda Follow-up Selama</label>
+                            <select id="contact-modal-overdue-duration"
+                                class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                                <option value="1w">1 Minggu</option>
+                                <option value="2w">2 Minggu</option>
+                                <option value="3w">3 Minggu</option>
+                                <option value="1m">1 Bulan</option>
+                            </select>
+                        </div>
+
                         <div id="refusal-follow-up-container" class="hidden">
                             <label for="contact-modal-refusal-follow-up"
                                 class="block text-sm font-medium text-gray-700">Tindak Lanjut</label>
@@ -544,7 +557,7 @@
         </div>
 
         <div id="import-conflict-modal"
-            class="fixed inset-0 bg-black bg-opacity-60 flex justify-center items-center z-[53] hidden">
+            class="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-[53] hidden">
             <div class="bg-white p-6 rounded-lg shadow-xl w-full max-w-2xl">
                 <div class="flex justify-between items-center mb-4">
                     <h2 class="text-xl font-bold text-yellow-600">Konflik Data Ditemukan</h2>

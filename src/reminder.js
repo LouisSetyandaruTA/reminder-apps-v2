@@ -29,6 +29,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const customerNotesModal = document.getElementById('customer-notes-modal');
     const contactModalStatus = document.getElementById('contact-modal-status');
     const postponeDurationContainer = document.getElementById('postpone-duration-container');
+    const overdueDurationContainer = document.getElementById('overdue-duration-container');
     const refusalFollowUpContainer = document.getElementById('refusal-follow-up-container');
     const viewBubbleBtn = document.getElementById('view-bubble-btn');
     const viewListBtn = document.getElementById('view-list-btn');
@@ -162,6 +163,19 @@ document.addEventListener('DOMContentLoaded', () => {
             default: return 'bg-gray-100 text-gray-800';
         }
     };
+
+    // --- FUNGSI BARU DITAMBAHKAN ---
+    // Memberikan nilai numerik untuk sorting berdasarkan prioritas
+    const getPriorityValue = (priorityString) => {
+        switch (priorityString) {
+            case 'Sangat Mendesak': return 1;
+            case 'Tinggi': return 2;
+            case 'Sedang': return 3;
+            case 'Rendah': return 4;
+            default: return 5;
+        }
+    };
+    // --- AKHIR FUNGSI BARU ---
 
     const formatDate = (dateString) => {
         if (!dateString) return 'N/A';
@@ -369,13 +383,31 @@ document.addEventListener('DOMContentLoaded', () => {
                         return true;
                 }
             })
+            // --- BLOK SORTIR DIUBAH TOTAL ---
             .sort((a, b) => {
+                // Hitung prioritas untuk keduanya
+                const priorityA = calculatePriority(a);
+                const priorityB = calculatePriority(b);
+
+                // Dapatkan nilai numerik untuk prioritas
+                const priorityValueA = getPriorityValue(priorityA);
+                const priorityValueB = getPriorityValue(priorityB);
+
+                // 1. Sortir berdasarkan nilai prioritas (ascending, 1 (Sangat Mendesak) datang sebelum 2 (Tinggi))
+                if (priorityValueA !== priorityValueB) {
+                    return priorityValueA - priorityValueB;
+                }
+
+                // 2. Jika prioritas sama, sortir berdasarkan tanggal (ascending, tanggal lebih awal datang lebih dulu)
                 const dateA = a.nextService ? new Date(a.nextService) : null;
                 const dateB = b.nextService ? new Date(b.nextService) : null;
-                if (!dateA) return 1;
-                if (!dateB) return -1;
+
+                if (!dateA) return 1; // Item tanpa tanggal ke bagian bawah
+                if (!dateB) return -1; // Item tanpa tanggal ke bagian bawah
+
                 return dateA - dateB;
             });
+        // --- AKHIR BLOK SORTIR YANG DIUBAH ---
 
         customerListContainer.innerHTML = '';
         emptyState.classList.toggle('hidden', sortedAndFilteredCustomers.length > 0);
@@ -483,6 +515,7 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('contact-modal-status').value = statusMap[customer.status] || 'not_contacted';
         document.getElementById('contact-modal-notes').value = customer.notes || '';
         postponeDurationContainer.classList.add('hidden');
+        overdueDurationContainer.classList.add('hidden');
         refusalFollowUpContainer.classList.add('hidden');
         openModal(updateContactModal);
     }
@@ -622,6 +655,7 @@ document.addEventListener('DOMContentLoaded', () => {
         contactModalStatus.addEventListener('change', (e) => {
             const selectedValue = e.target.value;
             postponeDurationContainer.classList.toggle('hidden', selectedValue !== 'postponed');
+            overdueDurationContainer.classList.toggle('hidden', selectedValue !== 'overdue');
             refusalFollowUpContainer.classList.toggle('hidden', selectedValue !== 'refused');
         });
 
@@ -799,6 +833,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 newStatus: statusMap[contactModalStatus.value],
                 notes: document.getElementById('contact-modal-notes').value,
                 postponeDuration: document.getElementById('contact-modal-postpone-duration').value,
+                overdueDuration: document.getElementById('contact-modal-overdue-duration').value,
                 refusalFollowUp: document.getElementById('contact-modal-refusal-follow-up').value
             };
             saveDataAndRefreshDetails(updateContactModal, window.electronAPI.updateContactStatus, data, 'Status kontak berhasil diupdate!', 'Gagal mengupdate status', customerToUpdateId);

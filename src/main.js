@@ -540,7 +540,7 @@ ipcMain.handle('add-customer', async (event, { spreadsheetId, customerData }) =>
   }
 });
 
-ipcMain.handle('update-contact-status', async (event, { spreadsheetId, serviceID, newStatus, notes, postponeDuration, refusalFollowUp }) => {
+ipcMain.handle('update-contact-status', async (event, { spreadsheetId, serviceID, newStatus, notes, postponeDuration, refusalFollowUp, overdueDuration }) => {
   try {
     const { serviceSheet } = await getSheets(spreadsheetId);
     const rows = await serviceSheet.getRows();
@@ -574,7 +574,16 @@ ipcMain.handle('update-contact-status', async (event, { spreadsheetId, serviceID
         Handler: rowToUpdate.get('Handler'),
       });
     } else if (newStatus === 'OVERDUE') {
-      rowToUpdate.set('Status', 'OVERDUE');
+      const newDate = new Date();
+      switch (overdueDuration) {
+        case '1w': newDate.setDate(newDate.getDate() + 7); break;
+        case '2w': newDate.setDate(newDate.getDate() + 14); break; // <-- BARIS BARU
+        case '3w': newDate.setDate(newDate.getDate() + 21); break; // <-- BARIS BARU
+        case '1m': newDate.setMonth(newDate.getMonth() + 1); break;
+        default: newDate.setDate(newDate.getDate() + 7); // Default ke 1 minggu
+      }
+      rowToUpdate.set('Status', 'UPCOMING'); // Set kembali ke UPCOMING dengan tanggal baru
+      rowToUpdate.set('ServiceDate', newDate.toISOString().split('T')[0]);
       rowToUpdate.set('Notes', notes);
       await rowToUpdate.save();
     } else if (newStatus === 'POSTPONED') {
