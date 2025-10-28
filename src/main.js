@@ -455,9 +455,9 @@ ipcMain.handle('get-client-email', () => {
   return creds.client_email;
 });
 
-ipcMain.handle('add-database', (event, { name, id }) => {
+ipcMain.handle('add-database', (event, { name, id, reminderInterval }) => {
   const dbs = readDatabases();
-  dbs.push({ name, id });
+  dbs.push({ name, id, reminderInterval: reminderInterval || 6 });
   writeDatabases(dbs);
   return { success: true };
 });
@@ -518,8 +518,13 @@ ipcMain.handle('add-customer', async (event, { spreadsheetId, customerData }) =>
       Notes: 'Pemasangan Awal',
     });
 
+    // Get reminder interval from database config
+    const databases = readDatabases();
+    const dbConfig = databases.find(db => db.id === spreadsheetId);
+    const reminderInterval = dbConfig?.reminderInterval || 6;
+
     const reminderDate = new Date(installationDate);
-    reminderDate.setMonth(reminderDate.getMonth() + 6);
+    reminderDate.setMonth(reminderDate.getMonth() + reminderInterval);
     const reminderDateString = reminderDate.toISOString().split('T')[0];
     const reminderServiceId = await generateNewServiceId(spreadsheetId, reminderDate);
     await serviceSheet.addRow({
@@ -562,7 +567,13 @@ ipcMain.handle('update-contact-status', async (event, { spreadsheetId, serviceID
 
       const completedServiceDate = new Date(rowToUpdate.get('ServiceDate'));
       const nextServiceDate = new Date(completedServiceDate);
-      nextServiceDate.setMonth(nextServiceDate.getMonth() + 6);
+      
+      // Get reminder interval from database config
+      const databases = readDatabases();
+      const dbConfig = databases.find(db => db.id === spreadsheetId);
+      const reminderInterval = dbConfig?.reminderInterval || 6;
+      
+      nextServiceDate.setMonth(nextServiceDate.getMonth() + reminderInterval);
 
       const nextServiceId = await generateNewServiceId(spreadsheetId, nextServiceDate);
       await serviceSheet.addRow({
@@ -577,8 +588,8 @@ ipcMain.handle('update-contact-status', async (event, { spreadsheetId, serviceID
       const newDate = new Date();
       switch (overdueDuration) {
         case '1w': newDate.setDate(newDate.getDate() + 7); break;
-        case '2w': newDate.setDate(newDate.getDate() + 14); break; // <-- BARIS BARU
-        case '3w': newDate.setDate(newDate.getDate() + 21); break; // <-- BARIS BARU
+        case '2w': newDate.setDate(newDate.getDate() + 14); break;
+        case '3w': newDate.setDate(newDate.getDate() + 21); break;
         case '1m': newDate.setMonth(newDate.getMonth() + 1); break;
         default: newDate.setDate(newDate.getDate() + 7); // Default ke 1 minggu
       }
@@ -1006,9 +1017,14 @@ ipcMain.handle('import-data-interactive', async (event, spreadsheetId) => {
         });
       });
 
+      // Get reminder interval from database config
+      const databases = readDatabases();
+      const dbConfig = databases.find(db => db.id === spreadsheetId);
+      const reminderInterval = dbConfig?.reminderInterval || 6;
+
       latestServiceMap.forEach((lastServiceDate, customerId) => {
         const reminderDate = new Date(lastServiceDate);
-        reminderDate.setMonth(reminderDate.getMonth() + 6);
+        reminderDate.setMonth(reminderDate.getMonth() + reminderInterval);
         allNewServiceRows.push({
           ServiceID: generateLocalServiceId(reminderDate),
           CustomerID: customerId, ServiceDate: reminderDate.toISOString().split('T')[0], Status: 'UPCOMING', Notes: 'Jadwal servis rutin berikutnya',

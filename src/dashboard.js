@@ -6,6 +6,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const addDbForm = document.getElementById('add-db-form');
     const dbNameInput = document.getElementById('db-name');
     const dbIdInput = document.getElementById('db-id');
+    const reminderIntervalInput = document.getElementById('reminder-interval');
     const shareEmailInstruction = document.getElementById('share-email-instruction');
 
     async function loadClientEmail() {
@@ -99,6 +100,7 @@ document.addEventListener('DOMContentLoaded', () => {
         e.preventDefault();
         const name = dbNameInput.value;
         const rawInput = dbIdInput.value.trim();
+        const reminderInterval = parseInt(reminderIntervalInput.value, 10);
 
         const extractSheetId = (input) => {
             const match = input.match(/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
@@ -107,8 +109,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const id = extractSheetId(rawInput);
 
-        if (name && id) {
-            await window.electronAPI.addDatabase({ name, id });
+        if (name && id && reminderInterval) {
+            await window.electronAPI.addDatabase({ name, id, reminderInterval });
             addDbForm.reset();
             closeModal();
             loadDatabases();
