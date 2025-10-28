@@ -25,6 +25,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const addCustomerModal = document.getElementById('add-customer-modal');
     const updateCustomerModal = document.getElementById('update-customer-modal');
     const updateHistoryNoteModal = document.getElementById('update-history-note-modal');
+    const reminderIntervalSelect = document.getElementById('reminder-interval-select');
     const customerDetailModal = document.getElementById('customer-detail-modal');
     const customerNotesModal = document.getElementById('customer-notes-modal');
     const contactModalStatus = document.getElementById('contact-modal-status');
@@ -37,10 +38,17 @@ document.addEventListener('DOMContentLoaded', () => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    window.electronAPI.onLoadSheet(({ id, name }) => {
+    window.electronAPI.onLoadSheet(async ({ id, name }) => {
         activeSheetId = id;
         activeSheetName = name;
         document.title = `Reminder - ${name}`;
+        // Set current interval selection based on database config
+        try {
+            const dbs = await window.electronAPI.getDatabases();
+            const db = dbs.find(d => d.id === activeSheetId);
+            const interval = (db && db.reminderInterval) ? db.reminderInterval : 6;
+            if (reminderIntervalSelect) reminderIntervalSelect.value = String(interval);
+        } catch (e) { /* ignore */ }
         initializeApp();
     });
 
@@ -595,6 +603,25 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('refresh-btn').addEventListener('click', () => initializeApp());
         document.getElementById('retry-btn').addEventListener('click', () => initializeApp());
         document.getElementById('export-data-btn').addEventListener('click', () => handleApiCall(window.electronAPI.exportData, null, 'Data berhasil diekspor!', 'Gagal mengekspor data'));
+        // Update reminder interval on change
+        if (reminderIntervalSelect) {
+            reminderIntervalSelect.addEventListener('change', async (e) => {
+                const newInterval = parseInt(e.target.value, 10);
+                if (!activeSheetId || !newInterval) return;
+                try {
+                    const res = await window.electronAPI.updateReminderInterval(activeSheetId, newInterval);
+                    if (!res.success) throw new Error(res.error || 'Gagal memperbarui interval.');
+                } catch (err) {
+                    alert(`Gagal memperbarui interval: ${err.message}`);
+                    // Revert UI selection if failed
+                    const dbs = await window.electronAPI.getDatabases();
+                    const db = dbs.find(d => d.id === activeSheetId);
+                    const interval = (db && db.reminderInterval) ? db.reminderInterval : 6;
+                    reminderIntervalSelect.value = String(interval);
+                }
+            });
+        }
+
         document.getElementById('import-data-btn').addEventListener('click', async () => {
             if (!confirm('Memulai proses impor interaktif? Anda mungkin akan diminta untuk menyelesaikan beberapa konflik data.')) {
                 return;

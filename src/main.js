@@ -469,6 +469,21 @@ ipcMain.handle('delete-database', (event, id) => {
   return { success: true };
 });
 
+// Update reminder interval for a database
+ipcMain.handle('update-reminder-interval', (event, { spreadsheetId, reminderInterval }) => {
+  const dbs = readDatabases();
+  const idx = dbs.findIndex(db => db.id === spreadsheetId);
+  if (idx === -1) {
+    return { success: false, error: 'Database tidak ditemukan.' };
+  }
+  const clamped = Math.max(1, Math.min(12, Number(reminderInterval) || 6));
+  dbs[idx].reminderInterval = clamped;
+  writeDatabases(dbs);
+  // Refresh notifications with new interval
+  checkUpcomingServices();
+  return { success: true, reminderInterval: clamped };
+});
+
 ipcMain.on('open-reminder-for-sheet', (event, { id, name }) => {
   createReminderWindow(id, name);
 });

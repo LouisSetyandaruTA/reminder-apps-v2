@@ -20,6 +20,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     exportData: (spreadsheetId) => ipcRenderer.invoke('export-data', spreadsheetId),
     importDataInteractive: (spreadsheetId) => ipcRenderer.invoke('import-data-interactive', spreadsheetId),
 
+    // Pengaturan interval pengingat per database
+    updateReminderInterval: (spreadsheetId, reminderInterval) => ipcRenderer.invoke('update-reminder-interval', { spreadsheetId, reminderInterval }),
+
     // Fungsi utilitas
     openWhatsapp: (phone) => ipcRenderer.invoke('open-whatsapp', phone),
     openExternalLink: (url) => ipcRenderer.invoke('open-external-link', url),
