@@ -208,7 +208,16 @@ async function getDataFromSheets(spreadsheetId) {
   const serviceRows = await serviceSheet.getRows();
 
   const customersMap = new Map();
+  const defaultInterval = (readDatabases().find(d => d.id === spreadsheetId)?.reminderInterval) || 6;
+  const rowsNeedingIntervalPersist = [];
   customerRows.forEach(row => {
+    const rawInterval = row.get('ReminderInterval');
+    const intervalNum = Number.parseInt(rawInterval, 10);
+    const missingOrInvalid = !Number.isFinite(intervalNum) || intervalNum < 1 || intervalNum > 12;
+    const effectiveInterval = missingOrInvalid ? defaultInterval : intervalNum;
+    if (missingOrInvalid) {
+      rowsNeedingIntervalPersist.push({ row, value: effectiveInterval });
+    }
     customersMap.set(row.get('CustomerID'), {
       customerID: row.get('CustomerID'),
       name: row.get('Nama'),
@@ -217,8 +226,22 @@ async function getDataFromSheets(spreadsheetId) {
       kota: formatCityName(row.get('Kota')),
       pemasangan: row.get('Pemasangan'),
       customerNotes: row.get('Notes Pelanggan'),
+      reminderInterval: effectiveInterval,
     });
   });
+  // Persist missing per-customer interval so future global changes won't affect them
+  if (rowsNeedingIntervalPersist.length > 0) {
+    for (const { row, value } of rowsNeedingIntervalPersist) {
+      try {
+        row.set('ReminderInterval', value);
+        // Save but don't await all at once to limit request burst
+        // eslint-disable-next-line no-await-in-loop
+        await row.save();
+      } catch (e) {
+        console.warn('Gagal menyimpan ReminderInterval default untuk customer:', e?.message || e);
+      }
+    }
+  }
 
   const serviceGroups = {};
   serviceRows.forEach(row => {
@@ -261,6 +284,7 @@ async function getDataFromSheets(spreadsheetId) {
           status: s.status
         })),
         nextService: upcomingServices.length > 0 ? representativeService.serviceDate : null,
+        reminderInterval: customerInfo.reminderInterval,
       });
     }
   }
@@ -521,6 +545,7 @@ ipcMain.handle('add-customer', async (event, { spreadsheetId, customerData }) =>
       Kota: formatCityName(customerData.kota),
       'Pemasangan': installationDateString,
       'Notes Pelanggan': customerData.customerNotes || '',
+      'ReminderInterval': Number(customerData.reminderInterval) || (readDatabases().find(d => d.id === spreadsheetId)?.reminderInterval) || 6,
     });
 
     const installationServiceId = await generateNewServiceId(spreadsheetId, installationDate);
@@ -533,10 +558,13 @@ ipcMain.handle('add-customer', async (event, { spreadsheetId, customerData }) =>
       Notes: 'Pemasangan Awal',
     });
 
-    // Get reminder interval from database config
+    // Get reminder interval (prefer per-customer)
+    const custInterval = Number(customerData.reminderInterval);
     const databases = readDatabases();
     const dbConfig = databases.find(db => db.id === spreadsheetId);
-    const reminderInterval = dbConfig?.reminderInterval || 6;
+    const reminderInterval = (Number.isFinite(custInterval) && custInterval >= 1 && custInterval <= 12)
+      ? custInterval
+      : (dbConfig?.reminderInterval || 6);
 
     const reminderDate = new Date(installationDate);
     reminderDate.setMonth(reminderDate.getMonth() + reminderInterval);
@@ -562,7 +590,7 @@ ipcMain.handle('add-customer', async (event, { spreadsheetId, customerData }) =>
 
 ipcMain.handle('update-contact-status', async (event, { spreadsheetId, serviceID, newStatus, notes, postponeDuration, refusalFollowUp, overdueDuration }) => {
   try {
-    const { serviceSheet } = await getSheets(spreadsheetId);
+    const { serviceSheet, customerSheet } = await getSheets(spreadsheetId);
     const rows = await serviceSheet.getRows();
 
     const triggeredRow = rows.find(r => r.get('ServiceID') === serviceID);
@@ -583,10 +611,15 @@ ipcMain.handle('update-contact-status', async (event, { spreadsheetId, serviceID
       const completedServiceDate = new Date(rowToUpdate.get('ServiceDate'));
       const nextServiceDate = new Date(completedServiceDate);
       
-      // Get reminder interval from database config
+      // Get reminder interval (prefer per-customer)
+      const custRows = await customerSheet.getRows();
+      const custRow = custRows.find(r => r.get('CustomerID') === customerId);
+      const custIntervalVal = Number.parseInt(custRow?.get('ReminderInterval'), 10);
       const databases = readDatabases();
       const dbConfig = databases.find(db => db.id === spreadsheetId);
-      const reminderInterval = dbConfig?.reminderInterval || 6;
+      const reminderInterval = (Number.isFinite(custIntervalVal) && custIntervalVal >= 1 && custIntervalVal <= 12)
+        ? custIntervalVal
+        : (dbConfig?.reminderInterval || 6);
       
       nextServiceDate.setMonth(nextServiceDate.getMonth() + reminderInterval);
 
@@ -708,9 +741,9 @@ ipcMain.handle('update-service', async (event, { spreadsheetId, serviceID, newDa
 
 ipcMain.handle('update-customer', async (event, { spreadsheetId, customerID, updatedData }) => {
   try {
-    const { customerSheet } = await getSheets(spreadsheetId);
-    const rows = await customerSheet.getRows();
-    const rowToUpdate = rows.find(r => r.get('CustomerID') === customerID);
+    const { customerSheet, serviceSheet } = await getSheets(spreadsheetId);
+    const custRows = await customerSheet.getRows();
+    const rowToUpdate = custRows.find(r => r.get('CustomerID') === customerID);
     if (!rowToUpdate) throw new Error('Customer not found.');
 
     if (updatedData.name !== undefined) {
@@ -729,9 +762,42 @@ ipcMain.handle('update-customer', async (event, { spreadsheetId, customerID, upd
       rowToUpdate.set('Notes Pelanggan', updatedData.customerNotes || '');
     }
 
+    let newInterval = null;
+    if (updatedData.reminderInterval !== undefined) {
+      const clamped = Math.max(1, Math.min(12, Number(updatedData.reminderInterval)));
+      rowToUpdate.set('ReminderInterval', clamped);
+      newInterval = clamped;
+    }
+
+    await rowToUpdate.save();
+
+    // If interval changed, adjust the nearest UPCOMING schedule to align
+    if (newInterval) {
+      const servRows = await serviceSheet.getRows();
+      const custServs = servRows.filter(r => r.get('CustomerID') === customerID);
+      // find latest COMPLETED service date
+      const completed = custServs
+        .filter(r => r.get('Status') === 'COMPLETED')
+        .sort((a, b) => new Date(b.get('ServiceDate')) - new Date(a.get('ServiceDate')));
+      const baseDate = completed.length > 0
+        ? new Date(completed[0].get('ServiceDate'))
+        : (rowToUpdate.get('Pemasangan') ? new Date(rowToUpdate.get('Pemasangan')) : null);
+
+      const upcoming = custServs
+        .filter(r => r.get('Status') === 'UPCOMING')
+        .sort((a, b) => new Date(a.get('ServiceDate')) - new Date(b.get('ServiceDate')));
+
+      if (baseDate && upcoming.length > 0) {
+        const newDate = new Date(baseDate);
+        newDate.setMonth(newDate.getMonth() + newInterval);
+        const yyyyMmDd = newDate.toISOString().split('T')[0];
+        upcoming[0].set('ServiceDate', yyyyMmDd);
+        await upcoming[0].save();
+      }
+    }
+
     clearCache();
     checkUpcomingServices();
-    await rowToUpdate.save();
     return { success: true };
   } catch (error) {
     return { success: false, error: error.message };
@@ -996,13 +1062,20 @@ ipcMain.handle('import-data-interactive', async (event, spreadsheetId) => {
 
       const finalCustomerRows = [];
       const customerIdMap = new Map();
+      const dbDefaultInterval = (readDatabases().find(d => d.id === spreadsheetId)?.reminderInterval) || 6;
       customersToAdd.forEach(c => {
         const datePart = formatDateToYYYYMMDD(new Date());
         const sequencePart = String(nextCustSeq++).padStart(5, '0');
         const newId = `CUST-${datePart}${sequencePart}`;
         finalCustomerRows.push({
-          CustomerID: newId, Nama: normalizeCustomerName(c.name), Alamat: c.address, 'No Telp': c.phone, Kota: c.kota,
-          'Pemasangan': c.purchaseDate, 'Notes Pelanggan': c.customerNotes || '',
+          CustomerID: newId,
+          Nama: normalizeCustomerName(c.name),
+          Alamat: c.address,
+          'No Telp': c.phone,
+          Kota: c.kota,
+          'Pemasangan': c.purchaseDate,
+          'Notes Pelanggan': c.customerNotes || '',
+          'ReminderInterval': dbDefaultInterval,
         });
         customerIdMap.set(normalizeName(c.name), newId);
       });

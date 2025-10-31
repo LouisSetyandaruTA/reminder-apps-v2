@@ -19,7 +19,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const errorIndicator = document.getElementById('error-indicator');
     const errorMessage = document.getElementById('error-message');
     const emptyState = document.getElementById('empty-state');
-    const modals = document.querySelectorAll('#modals-container .fixed');
+    // Include all fixed overlays/modals so body scroll and validation work for every modal
+    const modals = document.querySelectorAll('.fixed');
     const updateServiceModal = document.getElementById('update-service-modal');
     const updateContactModal = document.getElementById('update-contact-modal');
     const addCustomerModal = document.getElementById('add-customer-modal');
@@ -103,8 +104,10 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
 
-    const showLoading = () => {
-        modals.forEach(closeModal);
+    const showLoading = (keepOpen = false) => {
+        if (!keepOpen) {
+            modals.forEach(closeModal);
+        }
         loadingIndicator.classList.remove('hidden');
     };
     const hideLoading = () => loadingIndicator.classList.add('hidden');
@@ -273,6 +276,7 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('detail-modal-phone').textContent = customer.phone || 'N/A';
         document.getElementById('detail-modal-last-service').textContent = formatDate(mostRecentServiceDate);
         document.getElementById('detail-modal-handler').textContent = customer.handler || 'N/A';
+        document.getElementById('detail-modal-interval').textContent = `${customer.reminderInterval || 6} bulan`;
         document.getElementById('detail-modal-notes').textContent = customer.notes || 'Tidak ada catatan servis';
 
         const historyContainer = document.getElementById('detail-modal-history');
@@ -442,6 +446,10 @@ document.addEventListener('DOMContentLoaded', () => {
                             <i data-lucide="calendar" class="w-4 h-4"></i>
                             <span>${formatDate(customer.nextService)}</span>
                         </div>
+                        <div class="flex items-center gap-2 text-sm text-gray-600">
+                            <i data-lucide="repeat" class="w-4 h-4"></i>
+                            <span>Interval: <strong>${customer.reminderInterval || 6}</strong> bulan</span>
+                        </div>
                     </div>
                 </div>
                 <div class="border-t mt-3 pt-2 flex justify-end">
@@ -459,6 +467,9 @@ document.addEventListener('DOMContentLoaded', () => {
                     </div>
                     <div class="relative pl-4 data-separator flex-grow min-w-0">
                         <span class="text-sm font-medium text-gray-600 truncate">Servis Berikutnya: <span class="font-bold">${formatDate(customer.nextService)}</span></span>
+                    </div>
+                    <div class="relative pl-4 data-separator hidden lg:block">
+                        <span class="text-sm font-medium text-gray-600">Interval: <span class="font-bold">${customer.reminderInterval || 6} bulan</span></span>
                     </div>
                 </div>
                 <div class="flex-shrink-0 flex items-center gap-3 pl-4">
@@ -536,17 +547,39 @@ document.addEventListener('DOMContentLoaded', () => {
         openModal(updateHistoryNoteModal);
     }
 
-    function setupAndOpenAddCustomerModal() {
+async function setupAndOpenAddCustomerModal() {
         addCustomerModal.querySelector('form').reset();
+        // Default interval = current toolbar selection or DB default
+        const toolbarSelect = document.getElementById('reminder-interval-select');
+        let defaultInterval = toolbarSelect ? toolbarSelect.value : '6';
+        if (!toolbarSelect) {
+            try {
+                const dbs = await window.electronAPI.getDatabases();
+                const db = dbs.find(d => d.id === activeSheetId);
+                if (db && db.reminderInterval) defaultInterval = String(db.reminderInterval);
+            } catch (_) { /* ignore */ }
+        }
+        const addIntervalEl = document.getElementById('add-modal-interval');
+        if (addIntervalEl) addIntervalEl.value = defaultInterval;
         openModal(addCustomerModal);
     }
 
-    function setupAndOpenUpdateCustomerModal(customer) {
+async function setupAndOpenUpdateCustomerModal(customer) {
         selectedCustomer = customer;
         document.getElementById('update-modal-name').value = customer.name;
         document.getElementById('update-modal-phone').value = customer.phone;
         document.getElementById('update-modal-address').value = customer.address;
         document.getElementById('update-modal-kota').value = customer.kota || '';
+        const updateIntervalEl = document.getElementById('update-modal-interval');
+        let intervalVal = customer.reminderInterval;
+        if (!intervalVal) {
+            try {
+                const dbs = await window.electronAPI.getDatabases();
+                const db = dbs.find(d => d.id === activeSheetId);
+                intervalVal = (db && db.reminderInterval) ? db.reminderInterval : 6;
+            } catch (_) { intervalVal = 6; }
+        }
+        if (updateIntervalEl) updateIntervalEl.value = String(intervalVal);
         openModal(updateCustomerModal);
     }
 
@@ -831,6 +864,8 @@ document.addEventListener('DOMContentLoaded', () => {
             try {
                 const result = await apiFunction(activeSheetId, data);
                 if (result.success) {
+                    // Close modal to free inputs and avoid overlay issues
+                    if (modalToClose) closeModal(modalToClose);
                     alert(successMessage);
                     const refreshResult = await window.electronAPI.refreshData(activeSheetId);
                     if (refreshResult.success) {
@@ -893,14 +928,48 @@ document.addEventListener('DOMContentLoaded', () => {
                 phone: document.getElementById('update-modal-phone').value,
                 address: document.getElementById('update-modal-address').value,
                 kota: document.getElementById('update-modal-kota').value,
+                reminderInterval: parseInt(document.getElementById('update-modal-interval').value, 10)
             };
             const data = { customerID: customerToUpdateId, updatedData };
             saveDataAndRefreshDetails(updateCustomerModal, window.electronAPI.updateCustomer, data, 'Data pelanggan berhasil diupdate!', 'Gagal mengupdate data pelanggan', customerToUpdateId);
         });
 
-        document.getElementById('add-modal-save').addEventListener('click', () => {
-            const customerData = { name: document.getElementById('add-modal-name').value, phone: document.getElementById('add-modal-phone').value, address: document.getElementById('add-modal-address').value, kota: document.getElementById('add-modal-kota').value, customerNotes: document.getElementById('add-modal-customer-notes').value, nextService: document.getElementById('add-modal-nextService').value, handler: document.getElementById('add-modal-handler').value };
-            handleApiCall(window.electronAPI.addCustomer, customerData, 'Pelanggan baru berhasil ditambahkan!', 'Gagal menambah pelanggan');
+        document.getElementById('add-modal-save').addEventListener('click', async () => {
+            const customerData = {
+                name: document.getElementById('add-modal-name').value,
+                phone: document.getElementById('add-modal-phone').value,
+                address: document.getElementById('add-modal-address').value,
+                kota: document.getElementById('add-modal-kota').value,
+                customerNotes: document.getElementById('add-modal-customer-notes').value,
+                nextService: document.getElementById('add-modal-nextService').value,
+                handler: document.getElementById('add-modal-handler').value,
+                reminderInterval: parseInt(document.getElementById('add-modal-interval').value, 10)
+            };
+            showLoading(true);
+            try {
+                const result = await window.electronAPI.addCustomer(activeSheetId, customerData);
+                if (!result.success) throw new Error(result.error);
+                alert('Pelanggan baru berhasil ditambahkan!');
+                // Refresh list but keep modal open for fast repeated entry
+                const refreshResult = await window.electronAPI.refreshData(activeSheetId);
+                if (refreshResult.success) {
+                    customers = refreshResult.data || [];
+                    renderCustomers();
+                }
+                // Reset form fields for reuse
+                const form = addCustomerModal.querySelector('form');
+                if (form) form.reset();
+                // Keep interval default synced with toolbar
+                const toolbarSelect = document.getElementById('reminder-interval-select');
+                const addIntervalEl = document.getElementById('add-modal-interval');
+                if (toolbarSelect && addIntervalEl) addIntervalEl.value = toolbarSelect.value;
+                // Re-validate to update save button state
+                validateForm(addCustomerModal);
+            } catch (err) {
+                alert(`Gagal menambah pelanggan: ${err.message}`);
+            } finally {
+                hideLoading();
+            }
         });
 
         document.addEventListener('keydown', (e) => {
