@@ -976,13 +976,16 @@ ipcMain.handle('import-data-interactive', async (event, spreadsheetId) => {
     let bulkChoice = null;
 
     for (const newCustomer of customersToImport) {
-      let userAction;
-      if (bulkChoice) {
-        userAction = bulkChoice;
-      } else {
-        const newName = normalizeName(newCustomer.name), newAddress = normalizeAddress(newCustomer.address), newPhone = normalizePhone(newCustomer.phone);
-        const conflictId = (newPhone && indexByPhone.get(newPhone)) || (newName && newAddress && indexByNameAddress.get(`${newName}|${newAddress}`));
-        if (conflictId) {
+      let userAction = 'add'; // <--- DEFAULT: Selalu ADD jika tidak ada konflik atau bulkChoice tidak Skip/Update
+      const newName = normalizeName(newCustomer.name), newAddress = normalizeAddress(newCustomer.address), newPhone = normalizePhone(newCustomer.phone);
+      const conflictId = (newPhone && indexByPhone.get(newPhone)) || (newName && newAddress && indexByNameAddress.get(`${newName}|${newAddress}`));
+
+      if (conflictId) {
+        // Data BERKONFLIK. Tentukan aksi dari bulkChoice atau interaksi.
+        if (bulkChoice) {
+          userAction = bulkChoice; // Gunakan aksi Skip/Update/Duplicate massal
+        } else {
+          // Lakukan interaksi karena belum ada bulkChoice
           event.sender.send('hide-loading');
           const userChoice = await new Promise(resolve => {
             ipcMain.once('conflict-response', (e, choice) => resolve(choice));
@@ -990,18 +993,22 @@ ipcMain.handle('import-data-interactive', async (event, spreadsheetId) => {
           });
           if (userChoice.applyToAll) bulkChoice = userChoice.action;
           userAction = userChoice.action;
-        } else {
-          userAction = 'add';
         }
+      } else {
+        userAction = 'add';
       }
 
       switch (userAction) {
         case 'update':
-          const conflictId = (normalizePhone(newCustomer.phone) && indexByPhone.get(normalizePhone(newCustomer.phone))) || indexByNameAddress.get(`${normalizeName(newCustomer.name)}|${normalizeAddress(newCustomer.address)}`);
           customersToUpdate.push({ customerId: conflictId, data: newCustomer });
           break;
-        case 'add': case 'duplicate': customersToAdd.push(newCustomer); break;
-        case 'skip': skippedCount++; break;
+        case 'add':
+        case 'duplicate':
+          customersToAdd.push(newCustomer);
+          break;
+        case 'skip':
+          skippedCount++;
+          break;
       }
     }
 
