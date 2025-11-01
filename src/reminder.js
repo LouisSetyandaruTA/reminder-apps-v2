@@ -19,8 +19,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const errorIndicator = document.getElementById('error-indicator');
     const errorMessage = document.getElementById('error-message');
     const emptyState = document.getElementById('empty-state');
-    // Include all fixed overlays/modals so body scroll and validation work for every modal
-    const modals = document.querySelectorAll('.fixed');
+    const modals = document.querySelectorAll('#modals-container .fixed');
     const updateServiceModal = document.getElementById('update-service-modal');
     const updateContactModal = document.getElementById('update-contact-modal');
     const addCustomerModal = document.getElementById('add-customer-modal');
@@ -38,6 +37,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const today = new Date();
     today.setHours(0, 0, 0, 0);
+
+    // Busy flag to guard loader and input usability
+    let isBusy = false;
 
     window.electronAPI.onLoadSheet(async ({ id, name }) => {
         activeSheetId = id;
@@ -108,9 +110,18 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!keepOpen) {
             modals.forEach(closeModal);
         }
+        isBusy = true;
         loadingIndicator.classList.remove('hidden');
+        // prevent background scroll while busy
+        document.body.style.overflow = 'hidden';
     };
-    const hideLoading = () => loadingIndicator.classList.add('hidden');
+    const hideLoading = () => {
+        isBusy = false;
+        loadingIndicator.classList.add('hidden');
+        // restore scroll if no modal is open
+        const anyModalOpen = Array.from(modals).some(m => !m.classList.contains('hidden'));
+        if (!anyModalOpen) document.body.style.overflow = '';
+    };
 
     const updateViewButtons = () => {
         viewBubbleBtn.classList.toggle('bg-blue-100', currentView === 'bubble');
@@ -604,6 +615,24 @@ async function setupAndOpenUpdateCustomerModal(customer) {
 
     // --- Event Listeners Setup ---
     function setupEventListeners() {
+        // Safety: if user focuses any input while not busy, ensure overlays are cleared
+        document.addEventListener('focusin', (e) => {
+            if (isBusy) return;
+            const tag = e.target.tagName.toLowerCase();
+            if (['input', 'textarea', 'select'].includes(tag)) {
+                loadingIndicator.classList.add('hidden');
+                const anyModalOpen = Array.from(modals).some(m => !m.classList.contains('hidden'));
+                if (!anyModalOpen) document.body.style.overflow = '';
+            }
+        });
+
+        // Extra safety on general clicks
+        document.addEventListener('click', () => {
+            if (isBusy) return;
+            if (!loadingIndicator.classList.contains('hidden')) loadingIndicator.classList.add('hidden');
+            const anyModalOpen = Array.from(modals).some(m => !m.classList.contains('hidden'));
+            if (!anyModalOpen) document.body.style.overflow = '';
+        });
         searchInput.addEventListener('input', (e) => { searchTerm = e.target.value; renderCustomers(); });
         filterSelect.addEventListener('change', (e) => { filterBy = e.target.value; renderCustomers(); });
         cityFilterSelect.addEventListener('change', (e) => { filterByCity = e.target.value; renderCustomers(); });
@@ -945,28 +974,34 @@ async function setupAndOpenUpdateCustomerModal(customer) {
                 handler: document.getElementById('add-modal-handler').value,
                 reminderInterval: parseInt(document.getElementById('add-modal-interval').value, 10)
             };
-            showLoading(true);
+            // Hide the form while processing and show global loading overlay
+            closeModal(addCustomerModal);
+            showLoading();
             try {
                 const result = await window.electronAPI.addCustomer(activeSheetId, customerData);
                 if (!result.success) throw new Error(result.error);
-                alert('Pelanggan baru berhasil ditambahkan!');
-                // Refresh list but keep modal open for fast repeated entry
+                // Refresh list
                 const refreshResult = await window.electronAPI.refreshData(activeSheetId);
                 if (refreshResult.success) {
                     customers = refreshResult.data || [];
                     renderCustomers();
                 }
-                // Reset form fields for reuse
+                // Prep the form for next input
                 const form = addCustomerModal.querySelector('form');
                 if (form) form.reset();
-                // Keep interval default synced with toolbar
                 const toolbarSelect = document.getElementById('reminder-interval-select');
                 const addIntervalEl = document.getElementById('add-modal-interval');
                 if (toolbarSelect && addIntervalEl) addIntervalEl.value = toolbarSelect.value;
-                // Re-validate to update save button state
+                // Success toast
+                alert('Pelanggan baru berhasil ditambahkan!');
+                // Reopen the form after success
+                openModal(addCustomerModal);
                 validateForm(addCustomerModal);
             } catch (err) {
+                // Reopen the form so the user can correct inputs
+                openModal(addCustomerModal);
                 alert(`Gagal menambah pelanggan: ${err.message}`);
+                validateForm(addCustomerModal);
             } finally {
                 hideLoading();
             }
@@ -994,7 +1029,7 @@ async function setupAndOpenUpdateCustomerModal(customer) {
     async function initializeApp(options = {}) {
         const { keepFilters = false } = options;
 
-        showLoading();
+        // Do not auto-show loading here; only show on explicit DB-affecting actions
         errorIndicator.classList.add('hidden');
         customerListContainer.innerHTML = '';
         emptyState.classList.add('hidden');
@@ -1020,7 +1055,7 @@ async function setupAndOpenUpdateCustomerModal(customer) {
             errorMessage.textContent = err.message;
             errorIndicator.classList.remove('hidden');
         } finally {
-            hideLoading();
+            // No global hide here since we didn't show; individual actions manage loader
         }
     }
 
