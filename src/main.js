@@ -229,13 +229,10 @@ async function getDataFromSheets(spreadsheetId) {
       reminderInterval: effectiveInterval,
     });
   });
-  // Persist missing per-customer interval so future global changes won't affect them
   if (rowsNeedingIntervalPersist.length > 0) {
     for (const { row, value } of rowsNeedingIntervalPersist) {
       try {
         row.set('ReminderInterval', value);
-        // Save but don't await all at once to limit request burst
-        // eslint-disable-next-line no-await-in-loop
         await row.save();
       } catch (e) {
         console.warn('Gagal menyimpan ReminderInterval default untuk customer:', e?.message || e);
@@ -610,8 +607,7 @@ ipcMain.handle('update-contact-status', async (event, { spreadsheetId, serviceID
 
       const completedServiceDate = new Date(rowToUpdate.get('ServiceDate'));
       const nextServiceDate = new Date(completedServiceDate);
-      
-      // Get reminder interval (prefer per-customer)
+
       const custRows = await customerSheet.getRows();
       const custRow = custRows.find(r => r.get('CustomerID') === customerId);
       const custIntervalVal = Number.parseInt(custRow?.get('ReminderInterval'), 10);
@@ -620,7 +616,7 @@ ipcMain.handle('update-contact-status', async (event, { spreadsheetId, serviceID
       const reminderInterval = (Number.isFinite(custIntervalVal) && custIntervalVal >= 1 && custIntervalVal <= 12)
         ? custIntervalVal
         : (dbConfig?.reminderInterval || 6);
-      
+
       nextServiceDate.setMonth(nextServiceDate.getMonth() + reminderInterval);
 
       const nextServiceId = await generateNewServiceId(spreadsheetId, nextServiceDate);
@@ -762,39 +758,12 @@ ipcMain.handle('update-customer', async (event, { spreadsheetId, customerID, upd
       rowToUpdate.set('Notes Pelanggan', updatedData.customerNotes || '');
     }
 
-    let newInterval = null;
     if (updatedData.reminderInterval !== undefined) {
       const clamped = Math.max(1, Math.min(12, Number(updatedData.reminderInterval)));
       rowToUpdate.set('ReminderInterval', clamped);
-      newInterval = clamped;
     }
 
     await rowToUpdate.save();
-
-    // If interval changed, adjust the nearest UPCOMING schedule to align
-    if (newInterval) {
-      const servRows = await serviceSheet.getRows();
-      const custServs = servRows.filter(r => r.get('CustomerID') === customerID);
-      // find latest COMPLETED service date
-      const completed = custServs
-        .filter(r => r.get('Status') === 'COMPLETED')
-        .sort((a, b) => new Date(b.get('ServiceDate')) - new Date(a.get('ServiceDate')));
-      const baseDate = completed.length > 0
-        ? new Date(completed[0].get('ServiceDate'))
-        : (rowToUpdate.get('Pemasangan') ? new Date(rowToUpdate.get('Pemasangan')) : null);
-
-      const upcoming = custServs
-        .filter(r => r.get('Status') === 'UPCOMING')
-        .sort((a, b) => new Date(a.get('ServiceDate')) - new Date(b.get('ServiceDate')));
-
-      if (baseDate && upcoming.length > 0) {
-        const newDate = new Date(baseDate);
-        newDate.setMonth(newDate.getMonth() + newInterval);
-        const yyyyMmDd = newDate.toISOString().split('T')[0];
-        upcoming[0].set('ServiceDate', yyyyMmDd);
-        await upcoming[0].save();
-      }
-    }
 
     clearCache();
     checkUpcomingServices();
