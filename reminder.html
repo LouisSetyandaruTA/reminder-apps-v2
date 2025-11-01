@@ -45,7 +45,8 @@
                             <i data-lucide="plus" class="h-4 w-4 mr-2"></i> Tambah Pelanggan
                         </button>
                         <div class="flex items-center">
-                            <label for="reminder-interval-select" class="text-sm font-medium text-gray-700 mr-2">Interval:</label>
+                            <label for="reminder-interval-select"
+                                class="text-sm font-medium text-gray-700 mr-2">Interval:</label>
                             <select id="reminder-interval-select" class="border-gray-300 rounded-lg px-3 py-2">
                                 <option value="1">1 Bulan</option>
                                 <option value="2">2 Bulan</option>
@@ -152,11 +153,11 @@
         </div>
     </div>
 
-    <div id="loading-indicator" class="fixed inset-0 bg-gray-50 flex items-center justify-center z-50">
-        <div class="text-center">
-            <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-            <p class="text-gray-600">Memuat data pelanggan...</p>
-        </div>
+    <div id="loading-indicator" class="fixed inset-0 bg-gray-50 flex items-center justify-center z-[70]"></div>
+    <div class="text-center">
+        <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+        <p class="text-gray-600">Memuat data pelanggan...</p>
+    </div>
     </div>
     <div id="error-indicator" class="fixed inset-0 bg-gray-50 flex items-center justify-center z-50 hidden">
         <div class="text-center bg-white p-8 rounded-lg shadow-sm">
@@ -348,7 +349,8 @@
                                 placeholder="Masukkan nama teknisi">
                         </div>
                         <div>
-                            <label for="add-modal-interval" class="block text-sm font-medium text-gray-700">Interval Pengingat (Bulan)</label>
+                            <label for="add-modal-interval" class="block text-sm font-medium text-gray-700">Interval
+                                Pengingat (Bulan)</label>
                             <select id="add-modal-interval"
                                 class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500">
                                 <option value="1">1 Bulan</option>
@@ -416,7 +418,8 @@
                                 placeholder="Masukkan kota">
                         </div>
                         <div>
-                            <label for="update-modal-interval" class="block text-sm font-medium text-gray-700">Interval Pengingat (Bulan)</label>
+                            <label for="update-modal-interval" class="block text-sm font-medium text-gray-700">Interval
+                                Pengingat (Bulan)</label>
                             <select id="update-modal-interval"
                                 class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500">
                                 <option value="1">1 Bulan</option>
