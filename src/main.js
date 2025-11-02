@@ -444,7 +444,11 @@ const createReminderWindow = (sheetId, sheetName) => {
   });
 
   if (REMINDER_WINDOW_VITE_DEV_SERVER_URL) {
-    reminderWindow.loadURL(REMINDER_WINDOW_VITE_DEV_SERVER_URL);
+    // In dev, ensure we load the reminder entrypoint, not the dashboard index.html
+    const base = REMINDER_WINDOW_VITE_DEV_SERVER_URL.endsWith('/')
+      ? REMINDER_WINDOW_VITE_DEV_SERVER_URL.slice(0, -1)
+      : REMINDER_WINDOW_VITE_DEV_SERVER_URL;
+    reminderWindow.loadURL(`${base}/reminder.html`);
   } else {
     reminderWindow.loadFile(path.join(__dirname, `../renderer/${REMINDER_WINDOW_VITE_NAME}/reminder.html`));
   }
