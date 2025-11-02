@@ -500,7 +500,6 @@ ipcMain.handle('update-reminder-interval', (event, { spreadsheetId, reminderInte
   const clamped = Math.max(1, Math.min(12, Number(reminderInterval) || 6));
   dbs[idx].reminderInterval = clamped;
   writeDatabases(dbs);
-  // Refresh notifications with new interval
   checkUpcomingServices();
   return { success: true, reminderInterval: clamped };
 });
@@ -555,7 +554,6 @@ ipcMain.handle('add-customer', async (event, { spreadsheetId, customerData }) =>
       Notes: 'Pemasangan Awal',
     });
 
-    // Get reminder interval (prefer per-customer)
     const custInterval = Number(customerData.reminderInterval);
     const databases = readDatabases();
     const dbConfig = databases.find(db => db.id === spreadsheetId);
@@ -635,9 +633,9 @@ ipcMain.handle('update-contact-status', async (event, { spreadsheetId, serviceID
         case '2w': newDate.setDate(newDate.getDate() + 14); break;
         case '3w': newDate.setDate(newDate.getDate() + 21); break;
         case '1m': newDate.setMonth(newDate.getMonth() + 1); break;
-        default: newDate.setDate(newDate.getDate() + 7); // Default ke 1 minggu
+        default: newDate.setDate(newDate.getDate() + 7);
       }
-      rowToUpdate.set('Status', 'UPCOMING'); // Set kembali ke UPCOMING dengan tanggal baru
+      rowToUpdate.set('Status', 'UPCOMING');
       rowToUpdate.set('ServiceDate', newDate.toISOString().split('T')[0]);
       rowToUpdate.set('Notes', notes);
       await rowToUpdate.save();
@@ -976,16 +974,14 @@ ipcMain.handle('import-data-interactive', async (event, spreadsheetId) => {
     let bulkChoice = null;
 
     for (const newCustomer of customersToImport) {
-      let userAction = 'add'; // <--- DEFAULT: Selalu ADD jika tidak ada konflik atau bulkChoice tidak Skip/Update
+      let userAction = 'add';
       const newName = normalizeName(newCustomer.name), newAddress = normalizeAddress(newCustomer.address), newPhone = normalizePhone(newCustomer.phone);
       const conflictId = (newPhone && indexByPhone.get(newPhone)) || (newName && newAddress && indexByNameAddress.get(`${newName}|${newAddress}`));
 
       if (conflictId) {
-        // Data BERKONFLIK. Tentukan aksi dari bulkChoice atau interaksi.
         if (bulkChoice) {
-          userAction = bulkChoice; // Gunakan aksi Skip/Update/Duplicate massal
+          userAction = bulkChoice;
         } else {
-          // Lakukan interaksi karena belum ada bulkChoice
           event.sender.send('hide-loading');
           const userChoice = await new Promise(resolve => {
             ipcMain.once('conflict-response', (e, choice) => resolve(choice));
@@ -1081,7 +1077,6 @@ ipcMain.handle('import-data-interactive', async (event, spreadsheetId) => {
         });
       });
 
-      // Get reminder interval from database config
       const databases = readDatabases();
       const dbConfig = databases.find(db => db.id === spreadsheetId);
       const reminderInterval = dbConfig?.reminderInterval || 6;

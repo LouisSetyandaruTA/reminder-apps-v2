@@ -38,14 +38,12 @@ document.addEventListener('DOMContentLoaded', () => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    // Busy flag to guard loader and input usability
     let isBusy = false;
 
     window.electronAPI.onLoadSheet(async ({ id, name }) => {
         activeSheetId = id;
         activeSheetName = name;
         document.title = `Reminder - ${name}`;
-        // Set current interval selection based on database config
         try {
             const dbs = await window.electronAPI.getDatabases();
             const db = dbs.find(d => d.id === activeSheetId);
@@ -112,13 +110,11 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         isBusy = true;
         loadingIndicator.classList.remove('hidden');
-        // prevent background scroll while busy
         document.body.style.overflow = 'hidden';
     };
     const hideLoading = () => {
         isBusy = false;
         loadingIndicator.classList.add('hidden');
-        // restore scroll if no modal is open
         const anyModalOpen = Array.from(modals).some(m => !m.classList.contains('hidden'));
         if (!anyModalOpen) document.body.style.overflow = '';
     };
@@ -186,8 +182,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
 
-    // --- FUNGSI BARU DITAMBAHKAN ---
-    // Memberikan nilai numerik untuk sorting berdasarkan prioritas
     const getPriorityValue = (priorityString) => {
         switch (priorityString) {
             case 'Sangat Mendesak': return 1;
@@ -197,7 +191,6 @@ document.addEventListener('DOMContentLoaded', () => {
             default: return 5;
         }
     };
-    // --- AKHIR FUNGSI BARU ---
 
     const formatDate = (dateString) => {
         if (!dateString) return 'N/A';
@@ -376,7 +369,6 @@ document.addEventListener('DOMContentLoaded', () => {
                         const daysDiff = Math.ceil((nextServiceDate - today) / dayInMs);
                         return daysDiff >= 0 && daysDiff <= 30;
                     }
-                    // LOGIKA BARU DITAMBAHKAN DI SINI
                     case 'upcoming_2_months': {
                         if (!customer.nextService) return false;
                         const nextServiceDate = new Date(customer.nextService);
@@ -406,31 +398,25 @@ document.addEventListener('DOMContentLoaded', () => {
                         return true;
                 }
             })
-            // --- BLOK SORTIR DIUBAH TOTAL ---
             .sort((a, b) => {
-                // Hitung prioritas untuk keduanya
                 const priorityA = calculatePriority(a);
                 const priorityB = calculatePriority(b);
 
-                // Dapatkan nilai numerik untuk prioritas
                 const priorityValueA = getPriorityValue(priorityA);
                 const priorityValueB = getPriorityValue(priorityB);
 
-                // 1. Sortir berdasarkan nilai prioritas (ascending, 1 (Sangat Mendesak) datang sebelum 2 (Tinggi))
                 if (priorityValueA !== priorityValueB) {
                     return priorityValueA - priorityValueB;
                 }
 
-                // 2. Jika prioritas sama, sortir berdasarkan tanggal (ascending, tanggal lebih awal datang lebih dulu)
                 const dateA = a.nextService ? new Date(a.nextService) : null;
                 const dateB = b.nextService ? new Date(b.nextService) : null;
 
-                if (!dateA) return 1; // Item tanpa tanggal ke bagian bawah
-                if (!dateB) return -1; // Item tanpa tanggal ke bagian bawah
+                if (!dateA) return 1;
+                if (!dateB) return -1;
 
                 return dateA - dateB;
             });
-        // --- AKHIR BLOK SORTIR YANG DIUBAH ---
 
         customerListContainer.innerHTML = '';
         emptyState.classList.toggle('hidden', sortedAndFilteredCustomers.length > 0);
@@ -560,7 +546,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
 async function setupAndOpenAddCustomerModal() {
         addCustomerModal.querySelector('form').reset();
-        // Default interval = current toolbar selection or DB default
         const toolbarSelect = document.getElementById('reminder-interval-select');
         let defaultInterval = toolbarSelect ? toolbarSelect.value : '6';
         if (!toolbarSelect) {
@@ -594,7 +579,6 @@ async function setupAndOpenUpdateCustomerModal(customer) {
         openModal(updateCustomerModal);
     }
 
-    // Fungsi generic untuk handle API call yang tidak butuh kembali ke detail
     async function handleApiCall(apiFunction, data, successMessage, errorMessagePrefix) {
         showLoading();
         try {
@@ -615,7 +599,6 @@ async function setupAndOpenUpdateCustomerModal(customer) {
 
     // --- Event Listeners Setup ---
     function setupEventListeners() {
-        // Safety: if user focuses any input while not busy, ensure overlays are cleared
         document.addEventListener('focusin', (e) => {
             if (isBusy) return;
             const tag = e.target.tagName.toLowerCase();
@@ -626,7 +609,6 @@ async function setupAndOpenUpdateCustomerModal(customer) {
             }
         });
 
-        // Extra safety on general clicks
         document.addEventListener('click', () => {
             if (isBusy) return;
             if (!loadingIndicator.classList.contains('hidden')) loadingIndicator.classList.add('hidden');
@@ -665,7 +647,6 @@ async function setupAndOpenUpdateCustomerModal(customer) {
         document.getElementById('refresh-btn').addEventListener('click', () => initializeApp());
         document.getElementById('retry-btn').addEventListener('click', () => initializeApp());
         document.getElementById('export-data-btn').addEventListener('click', () => handleApiCall(window.electronAPI.exportData, null, 'Data berhasil diekspor!', 'Gagal mengekspor data'));
-        // Update reminder interval on change
         if (reminderIntervalSelect) {
             reminderIntervalSelect.addEventListener('change', async (e) => {
                 const newInterval = parseInt(e.target.value, 10);
@@ -675,7 +656,6 @@ async function setupAndOpenUpdateCustomerModal(customer) {
                     if (!res.success) throw new Error(res.error || 'Gagal memperbarui interval.');
                 } catch (err) {
                     alert(`Gagal memperbarui interval: ${err.message}`);
-                    // Revert UI selection if failed
                     const dbs = await window.electronAPI.getDatabases();
                     const db = dbs.find(d => d.id === activeSheetId);
                     const interval = (db && db.reminderInterval) ? db.reminderInterval : 6;
@@ -893,7 +873,6 @@ async function setupAndOpenUpdateCustomerModal(customer) {
             try {
                 const result = await apiFunction(activeSheetId, data);
                 if (result.success) {
-                    // Close modal to free inputs and avoid overlay issues
                     if (modalToClose) closeModal(modalToClose);
                     alert(successMessage);
                     const refreshResult = await window.electronAPI.refreshData(activeSheetId);
@@ -974,31 +953,25 @@ async function setupAndOpenUpdateCustomerModal(customer) {
                 handler: document.getElementById('add-modal-handler').value,
                 reminderInterval: parseInt(document.getElementById('add-modal-interval').value, 10)
             };
-            // Hide the form while processing and show global loading overlay
             closeModal(addCustomerModal);
             showLoading();
             try {
                 const result = await window.electronAPI.addCustomer(activeSheetId, customerData);
                 if (!result.success) throw new Error(result.error);
-                // Refresh list
                 const refreshResult = await window.electronAPI.refreshData(activeSheetId);
                 if (refreshResult.success) {
                     customers = refreshResult.data || [];
                     renderCustomers();
                 }
-                // Prep the form for next input
                 const form = addCustomerModal.querySelector('form');
                 if (form) form.reset();
                 const toolbarSelect = document.getElementById('reminder-interval-select');
                 const addIntervalEl = document.getElementById('add-modal-interval');
                 if (toolbarSelect && addIntervalEl) addIntervalEl.value = toolbarSelect.value;
-                // Success toast
                 alert('Pelanggan baru berhasil ditambahkan!');
-                // Reopen the form after success
                 openModal(addCustomerModal);
                 validateForm(addCustomerModal);
             } catch (err) {
-                // Reopen the form so the user can correct inputs
                 openModal(addCustomerModal);
                 alert(`Gagal menambah pelanggan: ${err.message}`);
                 validateForm(addCustomerModal);
@@ -1029,7 +1002,6 @@ async function setupAndOpenUpdateCustomerModal(customer) {
     async function initializeApp(options = {}) {
         const { keepFilters = false } = options;
 
-        // Do not auto-show loading here; only show on explicit DB-affecting actions
         errorIndicator.classList.add('hidden');
         customerListContainer.innerHTML = '';
         emptyState.classList.add('hidden');
@@ -1054,9 +1026,7 @@ async function setupAndOpenUpdateCustomerModal(customer) {
         } catch (err) {
             errorMessage.textContent = err.message;
             errorIndicator.classList.remove('hidden');
-        } finally {
-            // No global hide here since we didn't show; individual actions manage loader
-        }
+        } finally { /*No global hide here since we didn't show; individual actions manage loader*/ }
     }
 
     setupEventListeners();
