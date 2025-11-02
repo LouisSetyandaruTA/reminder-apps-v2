@@ -609,7 +609,18 @@ async function setupAndOpenUpdateCustomerModal(customer) {
             }
         });
 
-        document.addEventListener('click', () => {
+        // Allow clicking the loading overlay to force-close it in case it gets stuck
+        loadingIndicator.addEventListener('click', (e) => {
+            e.stopPropagation();
+            hideLoading();
+        });
+
+        document.addEventListener('click', (e) => {
+            // If user clicks on the loading overlay, always hide it
+            if (!loadingIndicator.classList.contains('hidden') && e.target.closest('#loading-indicator')) {
+                hideLoading();
+                return;
+            }
             if (isBusy) return;
             if (!loadingIndicator.classList.contains('hidden')) loadingIndicator.classList.add('hidden');
             const anyModalOpen = Array.from(modals).some(m => !m.classList.contains('hidden'));
@@ -969,12 +980,10 @@ async function setupAndOpenUpdateCustomerModal(customer) {
                 const addIntervalEl = document.getElementById('add-modal-interval');
                 if (toolbarSelect && addIntervalEl) addIntervalEl.value = toolbarSelect.value;
                 alert('Pelanggan baru berhasil ditambahkan!');
-                openModal(addCustomerModal);
-                validateForm(addCustomerModal);
+                // Do NOT reopen the Add Customer modal automatically; return to main view
             } catch (err) {
-                openModal(addCustomerModal);
                 alert(`Gagal menambah pelanggan: ${err.message}`);
-                validateForm(addCustomerModal);
+                // Do NOT reopen the Add Customer modal automatically
             } finally {
                 hideLoading();
             }
@@ -982,6 +991,12 @@ async function setupAndOpenUpdateCustomerModal(customer) {
 
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape') {
+                // First, if loading overlay is visible, close it
+                if (!loadingIndicator.classList.contains('hidden')) {
+                    hideLoading();
+                    return;
+                }
+
                 const visibleModals = Array.from(modals).filter(m => !m.classList.contains('hidden'));
                 if (visibleModals.length === 0) return;
 

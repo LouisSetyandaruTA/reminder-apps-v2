@@ -426,6 +426,9 @@ const createWindow = () => {
     },
   });
 
+  // Start maximized (windowed fullscreen)
+  mainWindow.maximize();
+
   if (MAIN_WINDOW_VITE_DEV_SERVER_URL) {
     mainWindow.loadURL(MAIN_WINDOW_VITE_DEV_SERVER_URL);
   } else {
@@ -442,6 +445,9 @@ const createReminderWindow = (sheetId, sheetName) => {
     },
     title: `Reminder - ${sheetName}`
   });
+
+  // Start maximized (windowed fullscreen)
+  reminderWindow.maximize();
 
   if (REMINDER_WINDOW_VITE_DEV_SERVER_URL) {
     // In dev, ensure we load the reminder entrypoint, not the dashboard index.html
