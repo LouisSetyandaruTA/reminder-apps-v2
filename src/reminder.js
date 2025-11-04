@@ -62,6 +62,15 @@ document.addEventListener('DOMContentLoaded', () => {
         inputElement.insertAdjacentElement('afterend', warningElement);
     };
 
+    // Ensure inputs are enabled and usable when opening a modal again
+    const enableAllInputs = (modal) => {
+        if (!modal) return;
+        modal.querySelectorAll('input, textarea, select, button').forEach(el => {
+            el.disabled = false;
+            el.readOnly = false;
+        });
+    };
+
     const hideWarning = (inputElement) => {
         const parent = inputElement.parentElement;
         const oldWarning = parent.querySelector('.input-warning');
@@ -88,6 +97,7 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     const openModal = (modal) => {
+        enableAllInputs(modal);
         modal.classList.remove('hidden');
         document.body.style.overflow = 'hidden';
         validateForm(modal);
@@ -560,7 +570,7 @@ async function setupAndOpenAddCustomerModal() {
         openModal(addCustomerModal);
     }
 
-async function setupAndOpenUpdateCustomerModal(customer) {
+    async function setupAndOpenUpdateCustomerModal(customer) {
         selectedCustomer = customer;
         document.getElementById('update-modal-name').value = customer.name;
         document.getElementById('update-modal-phone').value = customer.phone;
@@ -576,6 +586,7 @@ async function setupAndOpenUpdateCustomerModal(customer) {
             } catch (_) { intervalVal = 6; }
         }
         if (updateIntervalEl) updateIntervalEl.value = String(intervalVal);
+        enableAllInputs(updateCustomerModal);
         openModal(updateCustomerModal);
     }
 
@@ -884,7 +895,13 @@ async function setupAndOpenUpdateCustomerModal(customer) {
             try {
                 const result = await apiFunction(activeSheetId, data);
                 if (result.success) {
-                    if (modalToClose) closeModal(modalToClose);
+                    // Reset and close modal to free inputs and avoid overlay issues
+                    if (modalToClose) {
+                        const form = modalToClose.querySelector('form');
+                        if (form) form.reset();
+                        enableAllInputs(modalToClose);
+                        closeModal(modalToClose);
+                    }
                     alert(successMessage);
                     const refreshResult = await window.electronAPI.refreshData(activeSheetId);
                     if (refreshResult.success) {
@@ -901,11 +918,12 @@ async function setupAndOpenUpdateCustomerModal(customer) {
             } catch (err) {
                 console.error('API Call Error:', err);
                 alert(`${errorMessagePrefix}: ${err.message}`);
+                // Re-enable inputs so user can try again
+                if (modalToClose) enableAllInputs(modalToClose);
             } finally {
                 hideLoading();
             }
         }
-
         document.getElementById('contact-modal-save').addEventListener('click', () => {
             const customerToUpdateId = selectedCustomer.customerID;
             const statusMap = { 'not_contacted': 'UPCOMING', 'contacted': 'CONTACTED', 'overdue': 'OVERDUE', 'postponed': 'POSTPONED', 'refused': 'REFUSED' };
@@ -949,6 +967,8 @@ async function setupAndOpenUpdateCustomerModal(customer) {
                 kota: document.getElementById('update-modal-kota').value,
                 reminderInterval: parseInt(document.getElementById('update-modal-interval').value, 10)
             };
+            // Temporarily disable inputs to avoid double submit, will be re-enabled after
+            updateCustomerModal.querySelectorAll('input, textarea, select, button').forEach(el => el.disabled = true);
             const data = { customerID: customerToUpdateId, updatedData };
             saveDataAndRefreshDetails(updateCustomerModal, window.electronAPI.updateCustomer, data, 'Data pelanggan berhasil diupdate!', 'Gagal mengupdate data pelanggan', customerToUpdateId);
         });
