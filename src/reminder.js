@@ -6,7 +6,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let filterBy = 'all';
     let filterByCity = 'all';
     let searchTerm = '';
-    let currentView = 'bubble';
+    let currentView = localStorage.getItem('customerView') || 'bubble';
     let activeSheetId = null;
     let activeSheetName = '';
 
@@ -39,6 +39,7 @@ document.addEventListener('DOMContentLoaded', () => {
     today.setHours(0, 0, 0, 0);
 
     let isBusy = false;
+    let loadingTimer = null;
 
     window.electronAPI.onLoadSheet(async ({ id, name }) => {
         activeSheetId = id;
@@ -121,10 +122,17 @@ document.addEventListener('DOMContentLoaded', () => {
         isBusy = true;
         loadingIndicator.classList.remove('hidden');
         document.body.style.overflow = 'hidden';
+        if (loadingTimer) clearTimeout(loadingTimer);
+        // Safety auto-hide to prevent stuck UI
+        loadingTimer = setTimeout(() => {
+            console.warn('Auto-hiding loading overlay after timeout');
+            hideLoading();
+        }, 15000);
     };
     const hideLoading = () => {
         isBusy = false;
         loadingIndicator.classList.add('hidden');
+        if (loadingTimer) { clearTimeout(loadingTimer); loadingTimer = null; }
         const anyModalOpen = Array.from(modals).some(m => !m.classList.contains('hidden'));
         if (!anyModalOpen) document.body.style.overflow = '';
     };
@@ -135,6 +143,9 @@ document.addEventListener('DOMContentLoaded', () => {
         viewListBtn.classList.toggle('bg-blue-100', currentView === 'list');
         viewListBtn.classList.toggle('text-blue-700', currentView === 'list');
     };
+
+    // Ensure the correct button state on load
+    updateViewButtons();
 
     // --- Data Formatting & Logic Functions ---
     const getMostRecentService = (allServices) => {
@@ -1011,9 +1022,14 @@ async function setupAndOpenAddCustomerModal() {
 
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape') {
-                // First, if loading overlay is visible, close it
+                // Close loading overlay if visible
                 if (!loadingIndicator.classList.contains('hidden')) {
                     hideLoading();
+                    return;
+                }
+                // Close error overlay if visible
+                if (!errorIndicator.classList.contains('hidden')) {
+                    errorIndicator.classList.add('hidden');
                     return;
                 }
 
@@ -1061,7 +1077,10 @@ async function setupAndOpenAddCustomerModal() {
         } catch (err) {
             errorMessage.textContent = err.message;
             errorIndicator.classList.remove('hidden');
-        } finally { /*No global hide here since we didn't show; individual actions manage loader*/ }
+        } finally {
+            // Always ensure UI is interactive even if a previous loader got stuck
+            hideLoading();
+        }
     }
 
     setupEventListeners();

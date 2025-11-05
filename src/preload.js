@@ -36,7 +36,4 @@ contextBridge.exposeInMainWorld('electronAPI', {
     // Listener untuk mengontrol loading indicator
     onShowLoading: (callback) => ipcRenderer.on('show-loading', callback),
     onHideLoading: (callback) => ipcRenderer.on('hide-loading', callback),
-
-    // Listener untuk menerima data dari Main ke Renderer
-    onLoadSheet: (callback) => ipcRenderer.on('load-sheet', (_event, value) => callback(value)),
 });
