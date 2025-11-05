@@ -121,6 +121,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         isBusy = true;
         loadingIndicator.classList.remove('hidden');
+        loadingIndicator.style.pointerEvents = 'auto';
         document.body.style.overflow = 'hidden';
         if (loadingTimer) clearTimeout(loadingTimer);
         // Safety auto-hide to prevent stuck UI
@@ -132,6 +133,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const hideLoading = () => {
         isBusy = false;
         loadingIndicator.classList.add('hidden');
+        loadingIndicator.style.pointerEvents = 'none';
         if (loadingTimer) { clearTimeout(loadingTimer); loadingTimer = null; }
         const anyModalOpen = Array.from(modals).some(m => !m.classList.contains('hidden'));
         if (!anyModalOpen) document.body.style.overflow = '';
@@ -606,6 +608,7 @@ async function setupAndOpenAddCustomerModal() {
         try {
             const result = await apiFunction(activeSheetId, data);
             if (result.success) {
+                hideLoading();
                 if (successMessage) alert(successMessage);
                 initializeApp({ keepFilters: true });
             } else {
@@ -613,8 +616,10 @@ async function setupAndOpenAddCustomerModal() {
             }
         } catch (err) {
             console.error('API Call Error:', err);
+            hideLoading();
             alert(`${errorMessagePrefix}: ${err.message}`);
         } finally {
+            // ensure hidden if any error path missed
             hideLoading();
         }
     }
@@ -906,13 +911,8 @@ async function setupAndOpenAddCustomerModal() {
             try {
                 const result = await apiFunction(activeSheetId, data);
                 if (result.success) {
-                    // Reset and close modal to free inputs and avoid overlay issues
-                    if (modalToClose) {
-                        const form = modalToClose.querySelector('form');
-                        if (form) form.reset();
-                        enableAllInputs(modalToClose);
-                        closeModal(modalToClose);
-                    }
+                    if (modalToClose) closeModal(modalToClose);
+                    hideLoading();
                     alert(successMessage);
                     const refreshResult = await window.electronAPI.refreshData(activeSheetId);
                     if (refreshResult.success) {
@@ -928,9 +928,8 @@ async function setupAndOpenAddCustomerModal() {
                 }
             } catch (err) {
                 console.error('API Call Error:', err);
+                hideLoading();
                 alert(`${errorMessagePrefix}: ${err.message}`);
-                // Re-enable inputs so user can try again
-                if (modalToClose) enableAllInputs(modalToClose);
             } finally {
                 hideLoading();
             }
@@ -1010,9 +1009,11 @@ async function setupAndOpenAddCustomerModal() {
                 const toolbarSelect = document.getElementById('reminder-interval-select');
                 const addIntervalEl = document.getElementById('add-modal-interval');
                 if (toolbarSelect && addIntervalEl) addIntervalEl.value = toolbarSelect.value;
+                hideLoading();
                 alert('Pelanggan baru berhasil ditambahkan!');
                 // Do NOT reopen the Add Customer modal automatically; return to main view
             } catch (err) {
+                hideLoading();
                 alert(`Gagal menambah pelanggan: ${err.message}`);
                 // Do NOT reopen the Add Customer modal automatically
             } finally {
