@@ -89,12 +89,19 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!isOptional && !input.value.trim()) {
                 isAllValid = false;
             }
-            if (input.id.includes('phone') && input.value.trim() && !/^\d+$/.test(input.value.trim())) {
+            if (input.id.includes('phone') && input.value.trim() && !(/^\d+$/.test(input.value.trim()))) {
                 isAllValid = false;
                 showWarning(input, 'Nomor telepon hanya boleh berisi angka.');
             }
         });
         saveButton.disabled = !isAllValid;
+    };
+
+    const setFormEnabled = (container, enabled) => {
+        if (!container) return;
+        container.querySelectorAll('input, textarea, select, button').forEach(el => {
+            el.disabled = !enabled;
+        });
     };
 
     const openModal = (modal) => {
@@ -106,6 +113,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const closeModal = (modal) => {
         if (modal) {
+            // Always re-enable form controls when closing
+            setFormEnabled(modal, true);
             modal.querySelectorAll('.input-warning').forEach(el => el.remove());
             modal.classList.add('hidden');
         }
@@ -908,9 +917,11 @@ async function setupAndOpenAddCustomerModal() {
 
         async function saveDataAndRefreshDetails(modalToClose, apiFunction, data, successMessage, errorMessagePrefix, customerId) {
             showLoading();
+            if (modalToClose) setFormEnabled(modalToClose, false);
             try {
                 const result = await apiFunction(activeSheetId, data);
                 if (result.success) {
+                    if (modalToClose) setFormEnabled(modalToClose, true);
                     if (modalToClose) closeModal(modalToClose);
                     hideLoading();
                     alert(successMessage);
@@ -928,9 +939,11 @@ async function setupAndOpenAddCustomerModal() {
                 }
             } catch (err) {
                 console.error('API Call Error:', err);
+                if (modalToClose) setFormEnabled(modalToClose, true);
                 hideLoading();
                 alert(`${errorMessagePrefix}: ${err.message}`);
             } finally {
+                if (modalToClose) setFormEnabled(modalToClose, true);
                 hideLoading();
             }
         }
@@ -977,8 +990,6 @@ async function setupAndOpenAddCustomerModal() {
                 kota: document.getElementById('update-modal-kota').value,
                 reminderInterval: parseInt(document.getElementById('update-modal-interval').value, 10)
             };
-            // Temporarily disable inputs to avoid double submit, will be re-enabled after
-            updateCustomerModal.querySelectorAll('input, textarea, select, button').forEach(el => el.disabled = true);
             const data = { customerID: customerToUpdateId, updatedData };
             saveDataAndRefreshDetails(updateCustomerModal, window.electronAPI.updateCustomer, data, 'Data pelanggan berhasil diupdate!', 'Gagal mengupdate data pelanggan', customerToUpdateId);
         });
